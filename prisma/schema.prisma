@@ -1,0 +1,429 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Enums
+enum UserRole {
+  super_admin
+  admin
+  editor
+  guide
+  customer
+}
+
+enum UserStatus {
+  active
+  blocked
+  deleted
+}
+
+enum TrailStatus {
+  draft
+  active
+  inactive
+  archived
+}
+
+enum DifficultyLevel {
+  easy
+  easy_to_moderate
+  moderate
+  moderate_to_difficult
+  difficult
+  expert
+}
+
+enum ActivityType {
+  hiking
+  trekking
+  walking
+  trail_running
+  sightseeing
+  other
+}
+
+enum RouteFileType {
+  gpx
+  kmz
+  kml
+  geojson
+  other
+}
+
+enum TrailMediaType {
+  cover
+  route
+  gallery
+  video
+}
+
+enum CostItemType {
+  included
+  excluded
+}
+
+enum SafetyItemType {
+  precaution
+  required_gear
+}
+
+enum RatingBreakdownType {
+  count
+  percentage
+}
+
+enum ReviewStatus {
+  pending
+  approved
+  rejected
+}
+
+// Models
+model User {
+  id            BigInt   @id @default(autoincrement())
+  fullName      String   @db.VarChar(150)
+  email         String   @unique @db.VarChar(255)
+  phone         String?  @db.VarChar(30)
+  passwordHash  String?  @db.VarChar(255)
+  avatarUrl     String?
+  role          UserRole @default(customer)
+  status        UserStatus @default(active)
+  emailVerified Boolean  @default(false)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  // Relations
+  trailReviews  TrailReview[]
+  trailFavourites TrailFavourite[]
+  auditLogs     AdminAuditLog[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([role])
+  @@index([status])
+}
+
+model Trail {
+  id                    BigInt   @id @default(autoincrement())
+  slug                  String   @unique @db.VarChar(180)
+  hikeName              String   @db.VarChar(255)
+  description           String
+  routeFilePath         String?
+  routeFileType         RouteFileType?
+  maxAltitudeM          Int?
+  durationLabel         String?  @db.VarChar(100)
+  durationDays          Decimal? @db.Decimal(5, 2)
+  difficulty            DifficultyLevel?
+  difficultyLabel       String?  @db.VarChar(100)
+  difficultyRating      Decimal? @db.Decimal(3, 2)
+  activity              ActivityType @default(hiking)
+  distanceMinKm         Decimal? @db.Decimal(8, 2)
+  distanceMaxKm         Decimal? @db.Decimal(8, 2)
+  walkingTimeMinMinutes Int?
+  walkingTimeMaxMinutes Int?
+  groupSizeLimit        Int?
+  entryPermitRequired   Boolean  @default(false)
+  fitnessRequirement    String?
+  bestTimeNotes         String?
+  status                TrailStatus @default(draft)
+  sourceUpdatedAt       DateTime?
+  publishedAt           DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  deletedAt             DateTime?
+
+  // Relations
+  location              TrailLocation?
+  transportation        TrailTransportation?
+  ratingSummary         TrailRatingSummary?
+  itineraryPhases       ItineraryPhase[]
+  highlights            TrailHighlight[]
+  pointsOfInterest      PointOfInterest[]
+  costItems             TrailCostItem[]
+  recommendedSeasons    TrailRecommendedSeason[]
+  avoidedMonths         TrailAvoidedMonth[]
+  safetyItems           TrailSafetyItem[]
+  media                 TrailMedia[]
+  reviews               TrailReview[]
+  favourites            TrailFavourite[]
+
+  @@index([slug])
+  @@index([status])
+  @@index([activity])
+  @@index([difficulty])
+  @@index([maxAltitudeM])
+  @@index([status, activity])
+  @@index([status, difficulty])
+  @@index([status, publishedAt])
+}
+
+model TrailLocation {
+  id               BigInt   @id @default(autoincrement())
+  trailId          BigInt   @unique
+  region           String   @db.VarChar(255)
+  country          String   @db.VarChar(100)
+  startPoint       String?  @db.VarChar(255)
+  endPoint         String?  @db.VarChar(255)
+  distanceFromCityKm Decimal? @db.Decimal(8, 2)
+  latitude         Decimal? @db.Decimal(10, 7)
+  longitude        Decimal? @db.Decimal(10, 7)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  trail            Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@index([trailId])
+  @@index([country])
+  @@index([region])
+  @@index([country, region])
+}
+
+model TrailTransportation {
+  id             BigInt   @id @default(autoincrement())
+  trailId        BigInt   @unique
+  privateOption  String?
+  publicOption   String?
+  returnOption   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  trail          Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@index([trailId])
+}
+
+model TrailRatingSummary {
+  id               BigInt   @id @default(autoincrement())
+  trailId          BigInt   @unique
+  average          Decimal  @default(0) @db.Decimal(3, 2)
+  reviewCount      Int      @default(0)
+  breakdownType    RatingBreakdownType @default(count)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  trail            Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  breakdowns       TrailRatingBreakdown[]
+
+  @@index([trailId])
+  @@index([average])
+  @@index([reviewCount])
+}
+
+model TrailRatingBreakdown {
+  id               BigInt   @id @default(autoincrement())
+  ratingSummaryId  BigInt
+  stars            Int
+  value            Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  ratingSummary    TrailRatingSummary @relation(fields: [ratingSummaryId], references: [id], onDelete: Cascade)
+
+  @@unique([ratingSummaryId, stars])
+  @@index([ratingSummaryId])
+  @@index([stars])
+}
+
+model ItineraryPhase {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  phaseNumber     Int
+  title           String   @db.VarChar(255)
+  durationLabel   String?  @db.VarChar(100)
+  durationMinutes Int?
+  altitudeM       Int?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  details         ItineraryPhaseDetail[]
+
+  @@unique([trailId, phaseNumber])
+  @@unique([trailId, sortOrder])
+  @@index([trailId])
+}
+
+model ItineraryPhaseDetail {
+  id              BigInt   @id @default(autoincrement())
+  phaseId         BigInt
+  detail          String
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  phase           ItineraryPhase @relation(fields: [phaseId], references: [id], onDelete: Cascade)
+
+  @@unique([phaseId, sortOrder])
+  @@index([phaseId])
+}
+
+model TrailHighlight {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  text            String
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@unique([trailId, sortOrder])
+  @@index([trailId])
+}
+
+model PointOfInterest {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  name            String   @db.VarChar(255)
+  description     String?
+  distanceKm      Decimal? @db.Decimal(8, 2)
+  icon            String?  @db.VarChar(100)
+  latitude        Decimal? @db.Decimal(10, 7)
+  longitude       Decimal? @db.Decimal(10, 7)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@unique([trailId, sortOrder])
+  @@index([trailId])
+  @@index([trailId, distanceKm])
+}
+
+model TrailCostItem {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  type            CostItemType
+  text            String
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@unique([trailId, type, sortOrder])
+  @@index([trailId])
+  @@index([type])
+}
+
+model TrailRecommendedSeason {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  season          String   @db.VarChar(50)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@unique([trailId, season])
+  @@index([trailId])
+  @@index([sortOrder])
+}
+
+model TrailAvoidedMonth {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  monthNumber     Int?
+  monthLabel      String   @db.VarChar(50)
+  reason          String?
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@unique([trailId, monthLabel])
+  @@index([trailId])
+  @@index([sortOrder])
+}
+
+model TrailSafetyItem {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  type            SafetyItemType
+  text            String
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@unique([trailId, type, sortOrder])
+  @@index([trailId])
+  @@index([type])
+}
+
+model TrailMedia {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  type            TrailMediaType
+  url             String
+  altText         String?  @db.VarChar(255)
+  sortOrder       Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+
+  @@index([trailId])
+  @@index([type])
+  @@index([trailId, type, sortOrder])
+}
+
+model TrailReview {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  userId          BigInt
+  rating          Int
+  title           String?  @db.VarChar(150)
+  comment         String?
+  status          ReviewStatus @default(pending)
+  visitedAt       DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trailId])
+  @@index([trailId])
+  @@index([userId])
+  @@index([status])
+  @@index([rating])
+  @@index([trailId, status])
+}
+
+model TrailFavourite {
+  id              BigInt   @id @default(autoincrement())
+  trailId         BigInt
+  userId          BigInt
+  createdAt       DateTime @default(now())
+
+  trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, trailId])
+  @@index([trailId])
+  @@index([userId])
+}
+
+model AdminAuditLog {
+  id              BigInt   @id @default(autoincrement())
+  adminUserId     BigInt
+  action          String   @db.VarChar(100)
+  entityType      String?  @db.VarChar(80)
+  entityId        BigInt?
+  oldValue        Json?
+  newValue        Json?
+  createdAt       DateTime @default(now())
+
+  adminUser       User     @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@index([adminUserId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+}
