@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 
 // Custom BigInt serializer for JSON
@@ -14,7 +15,12 @@ const jsonStringify = (obj: any) => {
 };
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Serve static files (uploaded images)
+  app.useStaticAssets('uploads', {
+    prefix: '/uploads',
+  });
 
   // Override JSON serializer to handle BigInt
   app.use((req, res, next) => {
@@ -43,6 +49,7 @@ async function bootstrap() {
     .addTag('Users', 'User management endpoints')
     .addTag('Auth', 'Authentication endpoints')
     .addTag('Trails', 'Trail management endpoints')
+    .addTag('Favourites', 'Trail favourites endpoints')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

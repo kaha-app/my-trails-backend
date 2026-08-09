@@ -8,7 +8,6 @@ import {
   Delete,
   Query,
   UseGuards,
-  Request,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -108,32 +107,5 @@ export class TrailsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async publish(@Param('id') id: string) {
     return this.trailsService.publish(BigInt(id));
-  }
-
-  @Post(':id/favourites')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Add trail to user favorites' })
-  @ApiResponse({ status: 201, description: 'Added to favorites' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async addToFavourites(
-    @Param('id') trailId: string,
-    @Request() req: any,
-  ) {
-    return this.trailsService.addToFavourites(BigInt(trailId), req.user.id);
-  }
-
-  @Delete(':id/favourites')
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth('access-token')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove trail from user favorites' })
-  @ApiResponse({ status: 204, description: 'Removed from favorites' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async removeFromFavourites(
-    @Param('id') trailId: string,
-    @Request() req: any,
-  ) {
-    return this.trailsService.removeFromFavourites(BigInt(trailId), req.user.id);
   }
 }

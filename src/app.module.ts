@@ -3,11 +3,12 @@ import { PrismaModule } from './prisma/prisma.module';
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
 import { TrailsModule } from './trails/trails.module';
+import { FavouritesModule } from './favourites/favourites.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
 @Module({
-  imports: [PrismaModule, UsersModule, AuthModule, TrailsModule],
+  imports: [PrismaModule, UsersModule, AuthModule, TrailsModule, FavouritesModule],
   controllers: [AppController],
   providers: [AppService],
 })

@@ -149,26 +149,4 @@ export class TrailsService {
       },
     });
   }
-
-  async addToFavourites(trailId: bigint, userId: bigint) {
-    return this.prisma.trailFavourite.create({
-      data: {
-        trailId,
-        userId,
-      },
-    });
-  }
-
-  async removeFromFavourites(trailId: bigint, userId: bigint) {
-    await this.prisma.trailFavourite.delete({
-      where: {
-        userId_trailId: {
-          userId,
-          trailId,
-        },
-      },
-    });
-
-    return { message: 'Removed from favourites' };
-  }
 }

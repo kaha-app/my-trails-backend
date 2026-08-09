@@ -1,13 +1,24 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
 import { IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
+  @ApiProperty({ 
+    example: 'John Doe Updated', 
+    description: 'Full name (optional)',
+    required: false 
+  })
   @IsOptional()
   @IsString()
   @MinLength(2)
   fullName?: string;
 
+  @ApiProperty({ 
+    example: '+9876543210', 
+    description: 'International phone number (optional)',
+    required: false 
+  })
   @IsOptional()
   @IsString()
   @Matches(/^\+?[1-9]\d{1,14}$/, {
@@ -15,6 +26,11 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   })
   phone?: string;
 
+  @ApiProperty({ 
+    example: 'https://example.com/new-avatar.jpg', 
+    description: 'Avatar URL (optional)',
+    required: false 
+  })
   @IsOptional()
   @IsString()
   avatarUrl?: string;
