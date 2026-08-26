@@ -309,7 +309,7 @@ export default defineComputeConfig({
       outputDirectory: "build",
       entrypoint: "handler.js",
     },
-    httpPort: 3000,
+    httpPort: 4000,
     env: ".env",
   },
 });

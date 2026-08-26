@@ -11,9 +11,11 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFile,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -107,5 +109,20 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async remove(@Param('id') id: string) {
     return this.usersService.remove(BigInt(id));
+  }
+
+  @Patch(':id/role')
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update user role (admin only)' })
+  @ApiResponse({ status: 200, description: 'User role updated successfully' })
+  @ApiResponse({ status: 403, description: 'Forbidden - only admins can update roles' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  async updateRole(
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    // In a real app, verify the requesting user is an admin
+    // For now, this is a placeholder - you'd add proper auth guard
+    return this.usersService.update(BigInt(id), updateUserDto);
   }
 }

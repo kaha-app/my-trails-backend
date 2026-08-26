@@ -1,7 +1,8 @@
 import { PartialType } from '@nestjs/mapped-types';
 import { CreateUserDto } from './create-user.dto';
-import { IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { IsOptional, IsString, Matches, MinLength, IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
   @ApiProperty({ 
@@ -34,4 +35,14 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   @IsString()
   avatarUrl?: string;
+
+  @ApiProperty({ 
+    example: 'admin', 
+    description: 'User role (admin or user)',
+    required: false,
+    enum: ['admin', 'user']
+  })
+  @IsOptional()
+  @IsEnum(UserRole)
+  role?: UserRole;
 }

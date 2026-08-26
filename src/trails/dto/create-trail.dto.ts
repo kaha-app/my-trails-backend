@@ -1,6 +1,6 @@
+import { Type, Transform } from 'class-transformer';
 import { IsString, IsOptional, IsNumber, IsEnum, IsBoolean } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 enum DifficultyLevel {
   easy = 'easy',
@@ -20,96 +20,111 @@ enum ActivityType {
   other = 'other',
 }
 
+// Simple Trail Creation DTO - Only basic trail info
 export class CreateTrailDto {
-  @ApiProperty({ example: 'mount-kilimanjaro', description: 'URL slug (must be unique)' })
+  @ApiProperty({ example: 'shivapuri-day-hike', description: 'URL slug (must be unique)' })
   @IsString()
   slug: string;
 
-  @ApiProperty({ example: 'Mount Kilimanjaro', description: 'Trail name' })
+  @ApiProperty({ example: 'Shivapuri Day Hike', description: 'Trail name' })
   @IsString()
   hikeName: string;
 
-  @ApiProperty({ example: 'A challenging trek to Africa highest peak', description: 'Trail description' })
+  @ApiProperty({ example: 'Shivapuri Day Hiking is a perfect day Hiking...', description: 'Trail description' })
   @IsString()
   description: string;
 
-  @ApiProperty({ required: false, description: 'Path to route file' })
+  @ApiPropertyOptional({ example: 2732, description: 'Maximum altitude in meters' })
   @IsOptional()
-  @IsString()
-  routeFilePath?: string;
-
-  @ApiProperty({ required: false, example: 5895, description: 'Maximum altitude in meters' })
-  @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
   maxAltitudeM?: number;
 
-  @ApiProperty({ required: false, example: '5-6 days', description: 'Duration label' })
+  @ApiPropertyOptional({ example: '1 Day', description: 'Duration label' })
   @IsOptional()
   @IsString()
   durationLabel?: string;
 
-  @ApiProperty({ required: false, example: 5.5, description: 'Duration in days' })
+  @ApiPropertyOptional({ example: 1, description: 'Duration in days' })
   @IsOptional()
   @Type(() => Number)
   durationDays?: number;
 
-  @ApiProperty({ required: false, enum: DifficultyLevel, description: 'Difficulty level' })
+  @ApiPropertyOptional({ enum: DifficultyLevel, example: 'moderate', description: 'Difficulty level' })
   @IsOptional()
+  @Transform(({ value }) => {
+    // Convert "hard" to "difficult" for backward compatibility
+    return value === 'hard' ? 'difficult' : value;
+  })
   @IsEnum(DifficultyLevel)
   difficulty?: DifficultyLevel;
 
-  @ApiProperty({ required: false, description: 'Difficulty label' })
+  @ApiPropertyOptional({ example: 'Moderate', description: 'Difficulty label' })
   @IsOptional()
   @IsString()
   difficultyLabel?: string;
 
-  @ApiProperty({ required: false, example: 4.5, description: 'Difficulty rating (1-5)' })
+  @ApiPropertyOptional({ example: 3.5, description: 'Difficulty rating (1-5)' })
   @IsOptional()
   @Type(() => Number)
   difficultyRating?: number;
 
-  @ApiProperty({ required: false, enum: ActivityType, description: 'Type of activity' })
+  @ApiPropertyOptional({ enum: ActivityType, example: 'hiking', description: 'Type of activity' })
   @IsOptional()
   @IsEnum(ActivityType)
   activity?: ActivityType;
 
-  @ApiProperty({ required: false, example: 50, description: 'Minimum distance in km' })
+  @ApiPropertyOptional({ example: 18, description: 'Minimum distance in km' })
   @IsOptional()
   @Type(() => Number)
   distanceMinKm?: number;
 
-  @ApiProperty({ required: false, example: 65, description: 'Maximum distance in km' })
+  @ApiPropertyOptional({ example: 18, description: 'Maximum distance in km' })
   @IsOptional()
   @Type(() => Number)
   distanceMaxKm?: number;
 
-  @ApiProperty({ required: false, example: 480, description: 'Minimum walking time in minutes' })
+  @ApiPropertyOptional({ example: 360, description: 'Minimum walking time in minutes' })
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
   walkingTimeMinMinutes?: number;
 
-  @ApiProperty({ required: false, example: 600, description: 'Maximum walking time in minutes' })
+  @ApiPropertyOptional({ example: 420, description: 'Maximum walking time in minutes' })
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
   walkingTimeMaxMinutes?: number;
 
-  @ApiProperty({ required: false, example: 12, description: 'Group size limit' })
+  @ApiPropertyOptional({ example: 12, description: 'Group size limit' })
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
   groupSizeLimit?: number;
 
-  @ApiProperty({ required: false, example: true, description: 'Whether entry permit is required' })
+  @ApiPropertyOptional({ example: false, description: 'Whether entry permit is required' })
   @IsOptional()
   @IsBoolean()
   entryPermitRequired?: boolean;
 
-  @ApiProperty({ required: false, description: 'Fitness level requirement' })
+  @ApiPropertyOptional({ description: 'Fitness level requirement' })
   @IsOptional()
   @IsString()
   fitnessRequirement?: string;
 
-  @ApiProperty({ required: false, example: 'Best visited during dry season', description: 'Best time to visit notes' })
+  @ApiPropertyOptional({ example: 'Best visited during dry season', description: 'Best time to visit notes' })
   @IsOptional()
   @IsString()
   bestTimeNotes?: string;
+
+  @ApiPropertyOptional({ example: 'Shivapuri Nagarjun National Park, Kathmandu Valley', description: 'Region or area name' })
+  @IsOptional()
+  @IsString()
+  region?: string;
+
+  @ApiPropertyOptional({ example: 'Nepal', description: 'Country name' })
+  @IsOptional()
+  @IsString()
+  country?: string;
+
+  @ApiPropertyOptional({ example: '/uploads/gpx/trail-route.gpx', description: 'GPX file path from upload-gpx endpoint' })
+  @IsOptional()
+  @IsString()
+  gpxFilePath?: string;
 }

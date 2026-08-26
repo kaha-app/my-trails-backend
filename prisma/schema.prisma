@@ -8,11 +8,8 @@ datasource db {
 
 // Enums
 enum UserRole {
-  super_admin
   admin
-  editor
-  guide
-  customer
+  user
 }
 
 enum UserStatus {
@@ -82,6 +79,29 @@ enum ReviewStatus {
   rejected
 }
 
+enum RecordingStatus {
+  active
+  paused
+  completed
+  abandoned
+}
+
+enum HikePoiType {
+  viewpoint
+  restArea
+  waterSource
+  campsite
+  landmark
+  danger
+  parking
+  trailhead
+  junction
+  shelter
+  bridge
+  summit
+  other
+}
+
 // Models
 model User {
   id            BigInt   @id @default(autoincrement())
@@ -90,7 +110,7 @@ model User {
   phone         String?  @db.VarChar(30)
   passwordHash  String?  @db.VarChar(255)
   avatarUrl     String?
-  role          UserRole @default(customer)
+  role          UserRole @default(user)
   status        UserStatus @default(active)
   emailVerified Boolean  @default(false)
   lastLoginAt   DateTime?
@@ -102,6 +122,9 @@ model User {
   trailReviews  TrailReview[]
   trailFavourites TrailFavourite[]
   auditLogs     AdminAuditLog[]
+  hikeSessions  HikeSession[]
+  hikeWaypoints HikeWaypoint[]
+  hikePhotos    HikeWaypointPhoto[]
 
   @@index([email])
   @@index([phone])
@@ -152,6 +175,8 @@ model Trail {
   media                 TrailMedia[]
   reviews               TrailReview[]
   favourites            TrailFavourite[]
+  hikeSessions          HikeSession[]
+  hikeWaypoints         HikeWaypoint[]
 
   @@index([slug])
   @@index([status])
@@ -245,7 +270,6 @@ model ItineraryPhase {
   details         ItineraryPhaseDetail[]
 
   @@unique([trailId, phaseNumber])
-  @@unique([trailId, sortOrder])
   @@index([trailId])
 }
 
@@ -271,7 +295,6 @@ model TrailHighlight {
 
   trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
 
-  @@unique([trailId, sortOrder])
   @@index([trailId])
 }
 
@@ -284,13 +307,15 @@ model PointOfInterest {
   icon            String?  @db.VarChar(100)
   latitude        Decimal? @db.Decimal(10, 7)
   longitude       Decimal? @db.Decimal(10, 7)
+  altitudeM       Int?
+  images          String[] @default([])
+  facilities      String[] @default([])
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   trail           Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
 
-  @@unique([trailId, sortOrder])
   @@index([trailId])
   @@index([trailId, distanceKm])
 }
@@ -426,4 +451,106 @@ model AdminAuditLog {
   @@index([action])
   @@index([entityType])
   @@index([createdAt])
+}
+
+model HikeSession {
+  id                  String   @id @default(uuid())
+  trailId             BigInt
+  userId              BigInt
+  startTime           DateTime
+  endTime             DateTime?
+  status              RecordingStatus @default(active)
+  isPaused            Boolean  @default(false)
+  pausedAt            DateTime?
+  totalDistance       Decimal? @db.Decimal(10, 2)
+  totalAltitude       Int?
+  maxAltitude         Int?
+  minAltitude         Int?
+  currentAltitude     Int?
+  summary             String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  trail               Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackPoints         TrackPoint[]
+  waypoints           HikeWaypoint[]
+
+  @@index([userId])
+  @@index([trailId])
+  @@index([status])
+  @@index([startTime])
+  @@index([userId, startTime])
+  @@index([trailId, startTime])
+}
+
+model TrackPoint {
+  id                  BigInt   @id @default(autoincrement())
+  sessionId           String
+  latitude            Decimal  @db.Decimal(11, 8)
+  longitude           Decimal  @db.Decimal(12, 8)
+  elevation           Decimal? @db.Decimal(10, 2)
+  accuracy            Decimal? @db.Decimal(7, 2)
+  heading             Decimal? @db.Decimal(6, 2)
+  speed               Decimal? @db.Decimal(7, 2)
+  timestamp           DateTime
+  distanceSinceLastPoint Decimal? @db.Decimal(10, 2)
+  createdAt           DateTime @default(now())
+
+  session             HikeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([timestamp])
+}
+
+model HikeWaypoint {
+  id                  BigInt   @id @default(autoincrement())
+  sessionId           String
+  trailId             BigInt
+  userId              BigInt
+  name                String?  @db.VarChar(50)
+  description         String?  @db.VarChar(200)
+  type                HikePoiType
+  latitude            Decimal  @db.Decimal(11, 8)
+  longitude           Decimal  @db.Decimal(12, 8)
+  elevation           Decimal? @db.Decimal(10, 2)
+  facilities          String[] @default([])
+  conditions          String?  @db.VarChar(150)
+  distanceFromStart   Decimal? @db.Decimal(10, 2)
+  durationAtStart     String?
+  timestamp           DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  session             HikeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  trail               Trail    @relation(fields: [trailId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photos              HikeWaypointPhoto[]
+
+  @@index([sessionId])
+  @@index([trailId])
+  @@index([userId])
+  @@index([type])
+  @@index([sessionId, timestamp])
+}
+
+model HikeWaypointPhoto {
+  id                  BigInt   @id @default(autoincrement())
+  waypointId          BigInt
+  userId              BigInt
+  photoUrl            String   @db.VarChar(500)
+  thumbnail           String?  @db.VarChar(500)
+  latitude            Decimal? @db.Decimal(11, 8)
+  longitude           Decimal? @db.Decimal(12, 8)
+  elevation           Decimal? @db.Decimal(10, 2)
+  metadata            Json?
+  timestamp           DateTime
+  createdAt           DateTime @default(now())
+
+  waypoint            HikeWaypoint @relation(fields: [waypointId], references: [id], onDelete: Cascade)
+  user                User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([waypointId])
+  @@index([userId])
+  @@index([timestamp])
 }

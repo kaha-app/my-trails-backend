@@ -1,11 +1,15 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UploadService } from '../common/upload.service';
 import { CreateTrailDto } from './dto/create-trail.dto';
 import { UpdateTrailDto } from './dto/update-trail.dto';
 
 @Injectable()
 export class TrailsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private uploadService: UploadService,
+  ) {}
 
   async create(createTrailDto: CreateTrailDto) {
     // Check if slug already exists
@@ -17,8 +21,32 @@ export class TrailsService {
       throw new ConflictException('Slug already exists');
     }
 
+    const { region, country, gpxFilePath, ...trailData } = createTrailDto;
+
     return this.prisma.trail.create({
-      data: createTrailDto,
+      data: {
+        ...trailData,
+        activity: trailData.activity || 'hiking',
+        routeFilePath: gpxFilePath,
+        routeFileType: gpxFilePath ? 'gpx' : undefined,
+        ratingSummary: {
+          create: {
+            average: 0,
+            reviewCount: 0,
+            breakdownType: 'count',
+          },
+        },
+        location: region || country ? {
+          create: {
+            region: region || '',
+            country: country || '',
+          },
+        } : undefined,
+      } as any,
+      include: {
+        location: true,
+        ratingSummary: true,
+      },
     });
   }
 
@@ -43,14 +71,21 @@ export class TrailsService {
       include: {
         location: true,
         ratingSummary: true,
+        media: true,
       },
       orderBy: { createdAt: 'desc' },
     });
 
     const total = await this.prisma.trail.count({ where });
 
+    // Extract cover photo from media for each trail
+    const data = trails.map((trail: any) => ({
+      ...trail,
+      coverPhoto: trail.media.find((m: any) => m.type === 'cover') || null,
+    }));
+
     return {
-      data: trails,
+      data,
       total,
       skip,
       take,
@@ -93,7 +128,13 @@ export class TrailsService {
       throw new NotFoundException('Trail not found');
     }
 
-    return trail;
+    // Extract cover photo from media array for convenience
+    const coverPhoto = trail.media.find((m: any) => m.type === 'cover');
+
+    return {
+      ...trail,
+      coverPhoto,
+    };
   }
 
   async update(id: bigint, updateTrailDto: UpdateTrailDto) {
@@ -146,6 +187,244 @@ export class TrailsService {
       data: {
         status: 'active',
         publishedAt: new Date(),
+      },
+    });
+  }
+
+  // Individual add methods for step-by-step trail creation
+  async addItineraryPhase(id: bigint, phaseData: any) {
+    await this.findById(id);
+    return this.prisma.itineraryPhase.create({
+      data: {
+        ...phaseData,
+        trailId: id,
+        details: phaseData.details ? {
+          create: phaseData.details.map((detail: any) => ({
+            detail: detail.detail,
+            sortOrder: detail.sortOrder || 0,
+          })),
+        } : undefined,
+      },
+    });
+  }
+
+  async addHighlight(id: bigint, data: any) {
+    await this.findById(id);
+    return this.prisma.trailHighlight.create({
+      data: {
+        ...data,
+        trailId: id,
+      },
+    });
+  }
+
+  async addPointOfInterest(id: bigint, data: any, files?: { images?: Express.Multer.File[] }) {
+    await this.findById(id);
+
+    // Handle empty or undefined data
+    if (!data || (Object.keys(data).length === 0 && (!files?.images || files.images.length === 0))) {
+      throw new Error('POI name is required');
+    }
+
+    // Process uploaded images
+    let imageUrls: string[] = [];
+    if (files?.images && files.images.length > 0) {
+      imageUrls = files.images.map((file) => this.uploadService.uploadFile(file, 'images'));
+    }
+
+    // Merge with provided image URLs if any
+    const allImages = [
+      ...(data?.images && Array.isArray(data.images) ? data.images : []),
+      ...imageUrls,
+    ];
+
+    return this.prisma.pointOfInterest.create({
+      data: {
+        name: data?.name || 'Untitled POI',
+        description: data?.description,
+        distanceKm: data?.distanceKm ? parseFloat(data.distanceKm) : undefined,
+        icon: data?.icon,
+        altitudeM: data?.altitudeM ? parseInt(data.altitudeM) : undefined,
+        latitude: data?.latitude ? parseFloat(data.latitude) : undefined,
+        longitude: data?.longitude ? parseFloat(data.longitude) : undefined,
+        facilities: data?.facilities && Array.isArray(data.facilities) ? data.facilities : [],
+        images: allImages.length > 0 ? allImages : [],
+        sortOrder: data?.sortOrder ? parseInt(data.sortOrder) : 0,
+        trailId: id,
+      } as any,
+    });
+  }
+
+  async addCostItem(id: bigint, data: any) {
+    await this.findById(id);
+    return this.prisma.trailCostItem.create({
+      data: {
+        ...data,
+        trailId: id,
+      },
+    });
+  }
+
+  async addSafetyItem(id: bigint, data: any) {
+    await this.findById(id);
+    return this.prisma.trailSafetyItem.create({
+      data: {
+        ...data,
+        trailId: id,
+      },
+    });
+  }
+
+  async addSeason(id: bigint, data: any) {
+    await this.findById(id);
+    return this.prisma.trailRecommendedSeason.create({
+      data: {
+        ...data,
+        trailId: id,
+      },
+    });
+  }
+
+  async addAvoidedMonth(id: bigint, data: any) {
+    await this.findById(id);
+    return this.prisma.trailAvoidedMonth.create({
+      data: {
+        ...data,
+        trailId: id,
+      },
+    });
+  }
+
+  async addTransportation(id: bigint, data: any) {
+    const trail = await this.findById(id);
+
+    // Check if transportation already exists
+    const existingTransportation = await this.prisma.trailTransportation.findUnique({
+      where: { trailId: id },
+    });
+
+    if (existingTransportation) {
+      // Update existing transportation
+      return this.prisma.trailTransportation.update({
+        where: { trailId: id },
+        data: {
+          privateOption: data.privateOption,
+          publicOption: data.publicOption,
+          returnOption: data.returnOption,
+        },
+      });
+    }
+
+    // Create new transportation
+    return this.prisma.trailTransportation.create({
+      data: {
+        trailId: id,
+        privateOption: data.privateOption,
+        publicOption: data.publicOption,
+        returnOption: data.returnOption,
+      },
+    });
+  }
+
+  async addMedia(id: bigint, data: any, files?: { images?: Express.Multer.File[] }) {
+    await this.findById(id);
+
+    // If files provided, create one media entry per file
+    if (files?.images && files.images.length > 0) {
+      const mediaItems = files.images.map((file, index) => {
+        const url = this.uploadService.uploadFile(file, 'images');
+        return {
+          trailId: id,
+          type: data?.type || 'gallery',
+          url: url,
+          altText: data?.altText,
+          sortOrder: (data?.sortOrder ? parseInt(data.sortOrder) : 0) + index,
+          isActive: true,
+        };
+      });
+
+      return this.prisma.trailMedia.createMany({
+        data: mediaItems,
+      });
+    }
+
+    // If URL provided but no files, create media entry with URL
+    if (data?.url) {
+      return this.prisma.trailMedia.create({
+        data: {
+          trailId: id,
+          type: data.type || 'gallery',
+          url: data.url,
+          altText: data.altText,
+          sortOrder: data.sortOrder ? parseInt(data.sortOrder) : 0,
+          isActive: true,
+        } as any,
+      });
+    }
+
+    throw new Error('Either files or URL must be provided');
+  }
+
+  async uploadGpx(files?: { gpxFile?: Express.Multer.File[] }) {
+    if (!files?.gpxFile || files.gpxFile.length === 0) {
+      throw new Error('GPX file is required. Please upload a GPX file.');
+    }
+
+    const gpxFile = files.gpxFile[0];
+    const gpxFilePath = this.uploadService.uploadGpxFile(gpxFile);
+
+    return {
+      gpxFilePath,
+      message: 'GPX file uploaded successfully. Use this path in trail creation.',
+    };
+  }
+
+  async uploadCoverPhoto(id: bigint, files?: { coverPhoto?: Express.Multer.File[] }) {
+    const trail = await this.findById(id);
+
+    if (!files?.coverPhoto || files.coverPhoto.length === 0) {
+      throw new BadRequestException('Cover photo is required. Please upload a photo.');
+    }
+
+    const coverPhotoFile = files.coverPhoto[0];
+    
+    // Upload using dedicated method
+    const coverPhotoUrl = this.uploadService.uploadCoverPhoto(coverPhotoFile);
+
+    // Create media entry as cover photo
+    const media = await this.prisma.trailMedia.create({
+      data: {
+        trailId: id,
+        type: 'cover',
+        url: coverPhotoUrl,
+        altText: `${trail.hikeName} cover photo`,
+        sortOrder: 0,
+        isActive: true,
+      },
+    });
+
+    return {
+      coverPhotoUrl,
+      mediaId: media.id,
+      message: 'Cover photo uploaded successfully',
+    };
+  }
+
+  async uploadGpxRoute(id: bigint, files?: { gpxFile?: Express.Multer.File[] }) {
+    await this.findById(id);
+
+    if (!files?.gpxFile || files.gpxFile.length === 0) {
+      throw new Error('GPX file is required. Please upload a GPX file.');
+    }
+
+    const gpxFile = files.gpxFile[0];
+    const routeFilePath = this.uploadService.uploadGpxFile(gpxFile);
+
+    return this.prisma.trail.update({
+      where: { id },
+      data: {
+        routeFilePath,
+        routeFileType: 'gpx',
       },
     });
   }

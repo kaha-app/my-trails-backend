@@ -1,0 +1,807 @@
+{
+    "trails": [
+        {
+            "id": "champadevi-hike",
+            "hike_name": "Champadevi Hike",
+            "gpx_file": "assets/gpx/champadevi-temple.gpx",
+            "location": {
+                "region": "Pharping, Kathmandu Valley",
+                "country": "Nepal",
+                "distance_from_city_km": 20
+            },
+            "overview": {
+                "max_altitude_m": 2278,
+                "duration": "1 Day",
+                "difficulty": "Easy to Moderate",
+                "difficulty_rating": 3.2,
+                "distance_round_trip_km": "8-10",
+                "total_walking_time": "4-5 hours"
+            },
+            "rating": {
+                "average": 4.2,
+                "review_count": 87,
+                "breakdown": { "5": 40, "4": 30, "3": 18, "2": 8, "1": 4 }
+            },
+            "description": "Champadevi Hill is located in the southern direction of the city center. It is one of the popular one-day hiking destinations around Kathmandu Valley. At 2,285 m, this hill is about 20km from the tourist hub Thamel.\n\nChampadevi Day Hike is one of the best long-day walks near Kathmandu Valley. It starts from Pharping. Champadevi Hike has several starting points, such as Pharping, Hattiban Resort, and Machchhe Gaun. If you would like a short trip, you can begin at Hattiban and end at the same place. You can walk from Pharping to Machchhe Gaun or Kritipur for a long day trip. There will be a festival every year on a full moon day in May. You can see the Hindu shrines, Buddhist monuments, and prayer flags on the top of Champadevi Hill. The Champadevi trail gets very busy on Saturdays every week during the Nepalese weekend.",
+            "transportation": {
+                "private_option": "Taxi or private vehicle from hotel to Pharping Bhanjyang (30-40 minutes)",
+                "public_option": "Local bus from Ratnapark/RNAC to Pharping Bhanjyang (40 minutes)",
+                "return": "Local bus from Bhanjyang to Ratnapark (every 30 minutes)"
+            },
+            "itinerary_phases": [
+                {
+                    "phase": 1,
+                    "title": "Hotel to Pharping Bhanjyang & Hike to Hattiban Resort",
+                    "duration": "1 hour approx",
+                    "details": [
+                        "Drive 30-40 minutes to Pharping Bhanjyang",
+                        "20-30 minutes uphill hike to Hattiban Resort",
+                        "Short briefing session",
+                        "Last water refill stop"
+                    ]
+                },
+                {
+                    "phase": 2,
+                    "title": "Hattiban Resort to Champadevi Temple",
+                    "duration": "2 hours",
+                    "details": [
+                        "30 minutes road section walk",
+                        "Pine forest trail with stone-paved stairs",
+                        "Tin-roof resting spot near junction",
+                        "Seasonal bayberry plants (March)",
+                        "Steep ascent sections",
+                        "Temporary small local shop (seasonal)",
+                        "Beautiful Kathmandu Valley viewpoints"
+                    ]
+                },
+                {
+                    "phase": 3,
+                    "title": "Sightseeing & Rest at Champadevi Temple",
+                    "duration": "1 hour",
+                    "altitude_m": 2278,
+                    "details": [
+                        "Visit Champadevi Temple",
+                        "Enjoy panoramic valley and mountain views",
+                        "Rest in shaded seating areas",
+                        "Lunch/snack break"
+                    ]
+                },
+                {
+                    "phase": 4,
+                    "title": "Descent to Pharping Bhanjyang",
+                    "duration": "2 hours",
+                    "details": [
+                        "Steady downhill hike",
+                        "Stop at tea houses near Hattiban Resort",
+                        "Refreshments available (tea, noodles, dumplings)"
+                    ]
+                },
+                {
+                    "phase": 5,
+                    "title": "Return to Ratnapark",
+                    "duration": "40 minutes drive",
+                    "details": [
+                        "Local bus every 30 minutes",
+                        "Possible waiting time",
+                        "Private transport provided for booked guests"
+                    ]
+                }
+            ],
+            "highlights": [
+                "Stunning mountain panoramas from Langtang and Ganesh Himal to Annapurna ranges",
+                "Peaceful walk through lush pine forests",
+                "Highest viewpoint of Kathmandu Valley (2,278m)",
+                "Perfect one-day escape from Kathmandu city",
+                "Breakfast experience at Hattiban Resort"
+            ],
+            "points_of_interest": [
+                {
+                    "name": "Hattiban Resort",
+                    "distance_km": 1.2,
+                    "icon": "lodge",
+                    "altitude_m": 2100,
+                    "description": "A hillside resort at the edge of the pine forest, popular as a breakfast and briefing stop before the main climb begins. Offers valley views and a comfortable base for the trailhead.A hillside resort at the edge of the pine forest, popular as a breakfast and briefing stop before the main climb begins. Offers valley views and a comfortable base for the trailhead.A hillside resort at the edge of the pine forest, popular as a breakfast and briefing stop before the main climb begins. Offers valley views and a comfortable base for the trailhead.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4",
+                        "https://images.unsplash.com/photo-1445019980597-93fa8acb246c",
+                        "https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9",
+                        "https://images.unsplash.com/photo-1518733057094-95b53143d2a7"
+                    ],
+                    "facilities": ["Drinking water", "Tea house / restaurant", "Toilet", "Seating area", "Parking"]
+                },
+                {
+                    "name": "Pine Forest Trail",
+                    "distance_km": 2.5,
+                    "icon": "forest",
+                    "altitude_m": 2150,
+                    "description": "A shaded stretch of trail winding through dense pine woods with stone-paved stairs. Cool, quiet, and fragrant, this section offers relief from the sun and glimpses of local birdlife.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+                        "https://images.unsplash.com/photo-1441716844725-09cedc13a4e7",
+                        "https://images.unsplash.com/photo-1448375240586-882707db888b"
+                    ],
+                    "facilities": ["Resting benches", "Shaded shelter (seasonal)", "Trail signage"]
+                },
+                {
+                    "name": "Champadevi Temple",
+                    "distance_km": 4.5,
+                    "icon": "temple",
+                    "altitude_m": 2278,
+                    "description": "The sacred summit shrine and highest point of the hike, adorned with prayer flags and small Hindu and Buddhist monuments. Hosts an annual full-moon festival in May and offers 360-degree valley views.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                        "https://images.unsplash.com/photo-1519904981063-b0cf448d479e",
+                        "https://images.unsplash.com/photo-1544735716-392fe2489ffa",
+                        "https://images.unsplash.com/photo-1601921004897-b7d582ca4894"
+                    ],
+                    "facilities": ["Drinking water (seasonal shop)", "Toilet", "Shaded seating", "Small local shop (seasonal)", "Prayer/resting area"]
+                },
+                {
+                    "name": "Valley Viewpoint",
+                    "distance_km": 4.8,
+                    "icon": "viewpoint",
+                    "altitude_m": 2270,
+                    "description": "An open ridge just past the temple with unobstructed panoramas stretching from the Langtang and Ganesh Himal ranges to the Annapurna range on clear days.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                        "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                        "https://images.unsplash.com/photo-1508264165352-258db2ebd59b"
+                    ],
+                    "facilities": ["Resting benches", "Photo point railing"]
+                },
+                {
+                    "name": "Machchhe Gaun Village",
+                    "distance_km": 6.2,
+                    "icon": "village",
+                    "altitude_m": 1800,
+                    "description": "A traditional hillside village along the alternate descent route, offering a glimpse of rural Kathmandu Valley life, terraced farms, and simple tea houses.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1500534623283-312aade485b7",
+                        "https://images.unsplash.com/photo-1533709752211-118fcaf03312",
+                        "https://images.unsplash.com/photo-1509233725247-49e657c54213"
+                    ],
+                    "facilities": ["Drinking water", "Tea house", "Toilet", "Local shop", "Bus stop nearby"]
+                }
+            ],
+            "cost_details": {
+                "includes": [
+                    "Champadevi Entry Permit",
+                    "Private vehicle from hotel to Bhanjyang",
+                    "Licensed Trekking Guide",
+                    "Breakfast at Hattiban Resort"
+                ],
+                "excludes": [
+                    "Lunch and additional meals",
+                    "Personal expenses",
+                    "Guide tipping"
+                ]
+            },
+            "media": {
+                "cover_image": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                "route_image": "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                "gallery": [
+                    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                    "https://images.unsplash.com/photo-1519904981063-b0cf448d479e",
+                    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606"
+                ]
+            },
+            "status": "active",
+            "last_updated": "2026-03-04"
+        },
+        {
+            "id": "shivapuri-day-hike",
+            "hike_name": "Shivapuri Day Hike",
+            "gpx_file": "assets/gpx/shivapuri-hike.gpx",
+            "location": {
+                "region": "Kathmandu Valley",
+                "start_point": "Budhanilkantha",
+                "country": "Nepal"
+            },
+            "overview": {
+                "max_altitude_m": 2732,
+                "duration": "1 Day",
+                "difficulty": "Moderate",
+                "difficulty_rating": 4.0,
+                "activity": "Hiking",
+                "distance_round_trip_km": 18,
+                "total_walking_time": "6-7 hours",
+                "group_size_limit": 10
+            },
+            "rating": {
+                "average": 4.6,
+                "review_count": 125,
+                "breakdown": { "5": 55, "4": 25, "3": 12, "2": 5, "1": 3 }
+            },
+            "description": "Shivapuri Day Hiking is a perfect day Hiking near Kathmandu to see the Langtang Himalayan range as well as enjoy the nature around Kathmandu. The Shivapuri National park is one of the water resources for the citizen who is living in Kathmandu and is also home to thousands of flora and fauna, Thus it is also a paradise for those who love to see the birds.\n\nThe Shivapuri is the second-highest hill station in the Kathmandu valley after Fulchowki. The location and the height of the hill itself are perfect points to see the Langtang Himalayan range. Mountains like Ganesh Himal, Langtang-Lirung, Dorji Lhakpa and many other numerous peaks are widely visible from here if the day is very clear. The hike itself is a challenging walk due to its accent, there are many stairs on the way to the top of Shivpuri.",
+            "transportation": {
+                "private_option": "Private vehicle pickup and drop from hotel (30 minutes each way)",
+                "public_option": "Local bus/microbus from Ratnapark to Budhanilkantha + 30 min walk to park entrance",
+                "entry_permit_required": true
+            },
+            "itinerary_phases": [
+                {
+                    "phase": 1,
+                    "title": "Hotel to Shivapuri National Park Entrance",
+                    "duration": "30 minutes",
+                    "details": [
+                        "Pickup from hotel at 8:30 AM",
+                        "Drive to Budhanilkantha entrance",
+                        "Guide arranges entry permit",
+                        "Hike begins from national park gate"
+                    ]
+                },
+                {
+                    "phase": 2,
+                    "title": "Hike to Baghdwar & Shivapuri Peak",
+                    "duration": "3 hours ascent",
+                    "altitude_m": 2732,
+                    "details": [
+                        "1-hour hike on off-road trail towards Nagi Gumba/Tarebhir",
+                        "Stone-paved uphill trail section",
+                        "Rest stops for hydration",
+                        "Reach Baghdwar for photos and cultural briefing",
+                        "1-hour final ascent to Shivapuri Peak",
+                        "30-40 minutes sightseeing and lunch at summit"
+                    ]
+                },
+                {
+                    "phase": 3,
+                    "title": "Descent to Budhanilkantha",
+                    "duration": "3 hours",
+                    "details": [
+                        "Retrace same route downhill",
+                        "Steady descent through forest trail"
+                    ]
+                },
+                {
+                    "phase": 4,
+                    "title": "Transfer to Hotel",
+                    "duration": "30 minutes",
+                    "details": [
+                        "Private vehicle pickup from park exit",
+                        "Drop-off at hotel"
+                    ]
+                }
+            ],
+            "highlights": [
+                "Panoramic views of Langtang Lirung, Ganesh Himal, and Dorje Lhakpa",
+                "View of entire Kathmandu Valley",
+                "Baghdwar – cultural and religious site",
+                "Well-maintained stone-paved trail",
+                "Rhododendron blossoms in spring",
+                "Occasional winter snowfall experience"
+            ],
+            "points_of_interest": [
+                {
+                    "name": "Nagi Gumba Monastery",
+                    "distance_km": 2.1,
+                    "icon": "temple",
+                    "altitude_m": 2260,
+                    "description": "A serene Buddhist nunnery set among forested hills, known for its peaceful courtyard, chanting monks, and sweeping views over the Kathmandu Valley below.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1544735716-392fe2489ffa",
+                        "https://images.unsplash.com/photo-1601921004897-b7d582ca4894",
+                        "https://images.unsplash.com/photo-1591123120675-6f7f1aae0e5b"
+                    ],
+                    "facilities": ["Drinking water", "Toilet", "Resting courtyard", "Small shop (seasonal)"]
+                },
+                {
+                    "name": "Baghdwar Sacred Spring",
+                    "distance_km": 5.4,
+                    "icon": "water",
+                    "altitude_m": 2500,
+                    "description": "The revered source of the Bagmati River, marked by a stone tiger-mouth spout and small shrine. A culturally significant rest stop with cool spring water and shaded seating.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1499244571948-7ccddb3583f1",
+                        "https://images.unsplash.com/photo-1519904981063-b0cf448d479e",
+                        "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07",
+                        "https://images.unsplash.com/photo-1470770903676-69b98201ea1c"
+                    ],
+                    "facilities": ["Natural spring water", "Toilet", "Shaded seating", "Cultural shrine"]
+                },
+                {
+                    "name": "Shivapuri Peak Summit",
+                    "distance_km": 7.8,
+                    "icon": "viewpoint",
+                    "altitude_m": 2732,
+                    "description": "The highest point of the hike and second-highest hill station in the Kathmandu Valley, offering wide Himalayan panoramas including Langtang Lirung, Ganesh Himal, and Dorje Lhakpa.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                        "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                        "https://images.unsplash.com/photo-1508264165352-258db2ebd59b",
+                        "https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5"
+                    ],
+                    "facilities": ["Drinking water (limited)", "Toilet", "Lunch/rest area", "Viewing platform"]
+                },
+                {
+                    "name": "Rhododendron Forest",
+                    "distance_km": 3.6,
+                    "icon": "forest",
+                    "altitude_m": 2300,
+                    "description": "A dense belt of rhododendron and pine trees along the ridge trail, bursting into red and pink blooms every spring and offering excellent bird watching year-round.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1441716844725-09cedc13a4e7",
+                        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+                        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05"
+                    ],
+                    "facilities": ["Trail signage", "Resting benches"]
+                },
+                {
+                    "name": "Bird Watching Zone",
+                    "distance_km": 1.8,
+                    "icon": "wildlife",
+                    "altitude_m": 2000,
+                    "description": "A biodiverse patch of forest near the park entrance where over 300 species of birds have been recorded, popular with early-morning birders and nature photographers.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1444464666168-49d633b86797",
+                        "https://images.unsplash.com/photo-1552728089-57bdde30beb3",
+                        "https://images.unsplash.com/photo-1591608971358-f1fd6d5a4b47"
+                    ],
+                    "facilities": ["Drinking water", "Toilet", "Information board", "Observation point"]
+                }
+            ],
+            "cost_details": {
+                "includes": [
+                    "Private vehicle transport to/from hotel",
+                    "Licensed trekking guide",
+                    "Shivapuri National Park entry permit",
+                    "Breakfast"
+                ],
+                "excludes": [
+                    "Lunch and other meals",
+                    "Personal expenses",
+                    "Snacks and soft drinks",
+                    "Guide tipping"
+                ]
+            },
+            "hike_information": {
+                "best_time": {
+                    "recommended_seasons": ["Spring", "Autumn", "Winter"],
+                    "not_recommended_months": ["July", "August", "Mid-September"],
+                    "notes": "Monsoon months make trails slippery with poor visibility and heavy bug activity."
+                },
+                "precautions": [
+                    "Carry entry permit throughout the hike",
+                    "Use bug repellent cream",
+                    "Avoid hiking during heavy rain or thunderstorms",
+                    "Stay cautious about wild animals",
+                    "Hike with licensed guide for safety"
+                ],
+                "required_gear": [
+                    "Cap or hat",
+                    "Sunglasses",
+                    "Full-sleeve t-shirt",
+                    "Windstopper jacket",
+                    "Hiking pants",
+                    "Proper hiking boots",
+                    "1-2 liter water bottle",
+                    "Small hiking backpack (under 20L)"
+                ],
+                "fitness_requirement": "Moderate physical fitness required. Cardio and light training recommended before hike."
+            },
+            "media": {
+                "cover_image": "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                "route_image": "assets/images/shivapuri-route.png",
+                "gallery": [
+                    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                    "https://images.unsplash.com/photo-1519904981063-b0cf448d479e",
+                    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4",
+                    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                    "https://images.unsplash.com/photo-1519904981063-b0cf448d479e"
+                ]
+            },
+            "status": "active",
+            "last_updated": "2026-03-04"
+        },
+        {
+            "id": "tea-garden-trail",
+            "hike_name": "Tea Garden Trail",
+            "gpx_file": "assets/kmz/tea_garden_trail.kmz",
+            "location": {
+                "region": "Ilam District, Koshi Province",
+                "start_point": "Kanyam",
+                "country": "Nepal",
+                "distance_from_city_km": 90
+            },
+            "overview": {
+                "max_altitude_m": 2420,
+                "duration": "1 Day",
+                "difficulty": "Easy to Moderate",
+                "difficulty_rating": 3.5,
+                "activity": "Hiking",
+                "distance_round_trip_km": 12,
+                "total_walking_time": "5-6 hours",
+                "group_size_limit": 15
+            },
+            "rating": {
+                "average": 4.8,
+                "review_count": 148,
+                "breakdown": { "5": 82, "4": 41, "3": 15, "2": 6, "1": 4 }
+            },
+            "description": "The Tea Garden Trail is one of the most scenic hiking experiences in eastern Nepal. Located in the beautiful hills of Ilam, the trail passes through endless tea plantations, traditional villages, pine forests, and panoramic viewpoints overlooking the eastern Himalayas. Hikers can enjoy the fresh mountain air, observe local tea farming practices, and experience the peaceful rural lifestyle of Ilam. During clear weather, views of Kanchenjunga and surrounding peaks add to the beauty of the journey.",
+            "transportation": {
+                "private_option": "Private jeep or car from Ilam Bazaar to Kanyam (30 minutes)",
+                "public_option": "Local bus from Ilam Bazaar to Kanyam",
+                "return": "Local buses and shared jeeps available throughout the day"
+            },
+            "itinerary_phases": [
+                {
+                    "phase": 1,
+                    "title": "Arrival at Kanyam Tea Garden",
+                    "duration": "30 minutes",
+                    "details": [
+                        "Meet guide and trail briefing",
+                        "Explore Kanyam Tea Estate",
+                        "Photography session in tea gardens",
+                        "Warm-up walk"
+                    ]
+                },
+                {
+                    "phase": 2,
+                    "title": "Tea Plantation Trail",
+                    "duration": "2 hours",
+                    "details": [
+                        "Walk through rolling tea fields",
+                        "Observe tea harvesting activities",
+                        "Visit local tea processing area",
+                        "Scenic viewpoints across green hills"
+                    ]
+                },
+                {
+                    "phase": 3,
+                    "title": "Hilltop Viewpoint and Lunch Break",
+                    "duration": "1 hour",
+                    "altitude_m": 2420,
+                    "details": [
+                        "Reach highest viewpoint",
+                        "Panoramic views of Ilam hills",
+                        "Possible views of Kanchenjunga range",
+                        "Packed lunch or local tea house stop"
+                    ]
+                },
+                {
+                    "phase": 4,
+                    "title": "Village and Forest Trail",
+                    "duration": "1.5 hours",
+                    "details": [
+                        "Pass through traditional Limbu settlements",
+                        "Walk through pine and rhododendron forest",
+                        "Cultural interaction opportunities",
+                        "Birdwatching and photography"
+                    ]
+                },
+                {
+                    "phase": 5,
+                    "title": "Return to Kanyam",
+                    "duration": "1 hour",
+                    "details": [
+                        "Easy descent through tea gardens",
+                        "Tea tasting session",
+                        "Return transportation"
+                    ]
+                }
+            ],
+            "highlights": [
+                "Spectacular tea garden landscapes",
+                "Views of Kanchenjunga on clear days",
+                "Authentic tea tasting experience",
+                "Beautiful sunrise and mist-covered hills",
+                "Traditional Limbu and Rai villages",
+                "Photography paradise throughout the year",
+                "Rich biodiversity and birdlife"
+            ],
+            "points_of_interest": [
+                {
+                    "name": "Kanyam Tea Garden",
+                    "distance_km": 0.5,
+                    "icon": "tea",
+                    "altitude_m": 1750,
+                    "description": "One of Nepal's most iconic tea estates, famous for its rolling emerald hills of manicured tea bushes. A must-visit photo spot and the starting point of the trail.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1501785888041-af3ef285b470",
+                        "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
+                        "https://images.unsplash.com/photo-1449158743715-0a90ebb6d2d8",
+                        "https://images.unsplash.com/photo-1523920290228-4f321a939b4c"
+                    ],
+                    "facilities": ["Drinking water", "Tea house / café", "Toilet", "Parking", "Souvenir shop"]
+                },
+                {
+                    "name": "Tea Processing Center",
+                    "distance_km": 2.0,
+                    "icon": "factory",
+                    "altitude_m": 1800,
+                    "description": "A working tea factory where visitors can watch the withering, rolling, and drying process, and sample freshly brewed orthodox and CTC teas straight from the source.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1544787219-7f47ccb76574",
+                        "https://images.unsplash.com/photo-1576092768241-dec231879fc3",
+                        "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085"
+                    ],
+                    "facilities": ["Drinking water", "Tea tasting counter", "Toilet", "Guided tour desk"]
+                },
+                {
+                    "name": "Hilltop Viewpoint",
+                    "distance_km": 5.5,
+                    "icon": "viewpoint",
+                    "altitude_m": 2420,
+                    "description": "The highest point on the trail, delivering sweeping views across the Ilam hills and, on clear days, the distant snow-capped peak of Kanchenjunga.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                        "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                        "https://images.unsplash.com/photo-1508264165352-258db2ebd59b",
+                        "https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5"
+                    ],
+                    "facilities": ["Local tea house", "Toilet", "Shaded seating", "Lunch spot"]
+                },
+                {
+                    "name": "Limbu Village",
+                    "distance_km": 7.0,
+                    "icon": "village",
+                    "altitude_m": 2100,
+                    "description": "A traditional settlement of the indigenous Limbu community, where hikers can experience local customs, traditional homes, and warm hospitality along the trail.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1500534623283-312aade485b7",
+                        "https://images.unsplash.com/photo-1509233725247-49e657c54213",
+                        "https://images.unsplash.com/photo-1533709752211-118fcaf03312"
+                    ],
+                    "facilities": ["Drinking water", "Tea house", "Toilet", "Homestay option", "Local shop"]
+                },
+                {
+                    "name": "Rhododendron Forest",
+                    "distance_km": 8.5,
+                    "icon": "forest",
+                    "altitude_m": 2250,
+                    "description": "A quiet forest stretch filled with pine and rhododendron trees, home to diverse birdlife and a peaceful final approach back toward Kanyam.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1441716844725-09cedc13a4e7",
+                        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+                        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05"
+                    ],
+                    "facilities": ["Trail signage", "Resting benches"]
+                }
+            ],
+            "cost_details": {
+                "includes": [
+                    "Licensed local guide",
+                    "Tea garden entry fees",
+                    "Tea tasting session",
+                    "Basic first aid support"
+                ],
+                "excludes": [
+                    "Transportation to Ilam",
+                    "Lunch and snacks",
+                    "Personal expenses",
+                    "Travel insurance"
+                ]
+            },
+            "hike_information": {
+                "best_time": {
+                    "recommended_seasons": ["Spring", "Autumn"],
+                    "not_recommended_months": ["July", "August"],
+                    "notes": "Tea gardens are lush and green year-round, but spring and autumn provide the clearest mountain views."
+                },
+                "precautions": [
+                    "Carry rain protection as weather changes quickly",
+                    "Stay on marked trails inside tea plantations",
+                    "Wear proper hiking shoes",
+                    "Carry sufficient drinking water",
+                    "Respect local tea farming activities"
+                ],
+                "required_gear": [
+                    "Light hiking shoes",
+                    "Sun hat",
+                    "Rain jacket",
+                    "Water bottle",
+                    "Camera",
+                    "Small daypack",
+                    "Sunscreen"
+                ],
+                "fitness_requirement": "Suitable for beginners with basic fitness. Moderate uphill sections near viewpoints."
+            },
+            "media": {
+                "cover_image": "https://images.unsplash.com/photo-1501785888041-af3ef285b470",
+                "route_image": "assets/images/tea-garden-route.png",
+                "gallery": [
+                    "https://images.unsplash.com/photo-1501785888041-af3ef285b470",
+                    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee",
+                    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                    "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+                    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                    "https://images.unsplash.com/photo-1506744038136-46273834b3fb"
+                ]
+            },
+            "status": "active",
+            "last_updated": "2026-06-18"
+        },
+        {
+            "id": "sundarijal-chisapani-hike",
+            "hike_name": "Sundarijal to Chisapani Hike",
+            "gpx_file": "assets/gpx/nepal-sundarijal-chisapani.gpx",
+            "location": {
+                "region": "Shivapuri Nagarjun National Park, Kathmandu Valley",
+                "country": "Nepal",
+                "distance_from_city_km": 14
+            },
+            "overview": {
+                "max_altitude_m": 2429,
+                "duration": "1 Day",
+                "difficulty": "Moderate",
+                "difficulty_rating": 4.0,
+                "distance_round_trip_km": "18-20",
+                "total_walking_time": "6-7 hours"
+            },
+            "rating": {
+                "average": 4.4,
+                "review_count": 63,
+                "breakdown": { "5": 32, "4": 19, "3": 8, "2": 3, "1": 1 }
+            },
+            "description": "Sundarijal is the gateway to Shivapuri Nagarjun National Park and the traditional starting point of the Helambu and Langtang treks. The trail to Chisapani is one of the most rewarding day hikes near Kathmandu, climbing steadily through dense forest along the Shivapuri ridge before opening up to panoramic Himalayan views.\n\nThe hike begins near the Sundarijal reservoir and water source, following stone-paved steps and forest trails through the national park. After a steep climb to Mulkharka village, the trail levels out somewhat as it winds through pine and rhododendron forest toward Chisapani. On a clear day, Chisapani offers sweeping views of the Langtang, Jugal, and Ganesh Himal ranges, along with a distant glimpse of the Kathmandu Valley below. Many trekkers use this route as Day 1 of the Helambu circuit, but it's equally popular as a demanding one-day round trip from the city.",
+            "transportation": {
+                "private_option": "Taxi from Kathmandu to Sundarijal entrance (30-40 minutes)",
+                "public_option": "Local bus/microbus from Ratnapark or Boudha to Sundarijal (45-60 minutes)",
+                "return": "Local bus or shared jeep from Chisapani/Mulkharka back to Sundarijal (seasonal availability)"
+            },
+            "itinerary_phases": [
+                {
+                    "phase": 1,
+                    "title": "Kathmandu to Sundarijal & Park Entry",
+                    "duration": "1 hour approx",
+                    "details": [
+                        "Drive or bus 30-60 minutes to Sundarijal",
+                        "Shivapuri Nagarjun National Park entry permit check",
+                        "Brief warm-up walk along the reservoir trail",
+                        "Last reliable water/snack stop before the climb"
+                    ]
+                },
+                {
+                    "phase": 2,
+                    "title": "Sundarijal to Mulkharka",
+                    "duration": "1.5-2 hours",
+                    "details": [
+                        "Steep stone-stepped ascent through forest",
+                        "Crossing small streams and waterfalls",
+                        "Views back over the Kathmandu Valley",
+                        "Tea houses and small lodges at Mulkharka"
+                    ]
+                },
+                {
+                    "phase": 3,
+                    "title": "Mulkharka to Chisapani",
+                    "duration": "2.5-3 hours",
+                    "altitude_m": 2429,
+                    "details": [
+                        "Gradual climb through pine and rhododendron forest",
+                        "Ridge-line walking with intermittent mountain views",
+                        "Final push to Chisapani viewpoint",
+                        "Lunch break with Himalayan panorama (Langtang, Jugal, Ganesh Himal)"
+                    ]
+                },
+                {
+                    "phase": 4,
+                    "title": "Descent to Mulkharka / Sundarijal",
+                    "duration": "2.5-3 hours",
+                    "details": [
+                        "Steady downhill return along the same trail",
+                        "Optional tea stop at Mulkharka",
+                        "Rejoin the reservoir trail back to Sundarijal entrance"
+                    ]
+                },
+                {
+                    "phase": 5,
+                    "title": "Return to Kathmandu",
+                    "duration": "30-60 minutes drive",
+                    "details": [
+                        "Bus, shared jeep, or taxi from Sundarijal back to the city",
+                        "Possible waiting time for public transport",
+                        "Private transport available for booked guests"
+                    ]
+                }
+            ],
+            "highlights": [
+                "Sweeping views of Langtang, Jugal, and Ganesh Himal ranges from Chisapani",
+                "Entry point to Shivapuri Nagarjun National Park's dense forest trails",
+                "Traditional starting point of the Helambu and Langtang treks",
+                "Waterfalls and stream crossings along the Sundarijal reservoir trail",
+                "One of the highest-altitude day hikes accessible from Kathmandu"
+            ],
+            "points_of_interest": [
+                {
+                    "name": "Sundarijal Reservoir",
+                    "distance_km": 0.5,
+                    "icon": "lake",
+                    "altitude_m": 1463,
+                    "description": "A key water source for Kathmandu Valley, this reservoir sits at the trailhead and offers an easy warm-up walk past small waterfalls before the climb begins.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1551632811-561732d1e306",
+                        "https://images.unsplash.com/photo-1465146344425-f00d5f5c8f07",
+                        "https://images.unsplash.com/photo-1499244571948-7ccddb3583f1"
+                    ],
+                    "facilities": ["Drinking water", "Toilet", "Entry checkpoint"]
+                },
+                {
+                    "name": "Shivapuri National Park Gate",
+                    "distance_km": 1.0,
+                    "icon": "gate",
+                    "altitude_m": 1500,
+                    "description": "The official entrance to Shivapuri Nagarjun National Park, where permits are checked before hikers proceed into the forested ascent toward Mulkharka.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1470770903676-69b98201ea1c",
+                        "https://images.unsplash.com/photo-1441716844725-09cedc13a4e7",
+                        "https://images.unsplash.com/photo-1518709268805-4e9042af2176"
+                    ],
+                    "facilities": ["Drinking water", "Toilet", "Permit counter", "Information board"]
+                },
+                {
+                    "name": "Mulkharka Village",
+                    "distance_km": 4.5,
+                    "icon": "village",
+                    "altitude_m": 2100,
+                    "description": "A small hillside settlement with tea houses and lodges, marking the end of the steepest climb and a welcome rest stop with valley views back toward Kathmandu.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1500534623283-312aade485b7",
+                        "https://images.unsplash.com/photo-1509233725247-49e657c54213",
+                        "https://images.unsplash.com/photo-1533709752211-118fcaf03312",
+                        "https://images.unsplash.com/photo-1523920290228-4f321a939b4c"
+                    ],
+                    "facilities": ["Drinking water", "Tea house / lodge", "Toilet", "Local shop", "Resting area"]
+                },
+                {
+                    "name": "Pine & Rhododendron Forest",
+                    "distance_km": 6.8,
+                    "icon": "forest",
+                    "altitude_m": 2300,
+                    "description": "A long ridge-line stretch of mixed pine and rhododendron forest connecting Mulkharka to Chisapani, offering shade, birdlife, and occasional mountain views through the trees.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1441974231531-c6227db76b6e",
+                        "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05",
+                        "https://images.unsplash.com/photo-1448375240586-882707db888b"
+                    ],
+                    "facilities": ["Trail signage", "Resting benches"]
+                },
+                {
+                    "name": "Chisapani Viewpoint",
+                    "distance_km": 9.5,
+                    "icon": "viewpoint",
+                    "altitude_m": 2429,
+                    "description": "The scenic high point and traditional starting point of the Helambu trek, offering sweeping views of the Langtang, Jugal, and Ganesh Himal ranges along with a distant glimpse of Kathmandu Valley.",
+                    "images": [
+                        "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                        "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                        "https://images.unsplash.com/photo-1508264165352-258db2ebd59b",
+                        "https://images.unsplash.com/photo-1483728642387-6c3bdd6c93e5"
+                    ],
+                    "facilities": ["Drinking water", "Tea house / lodge", "Toilet", "Lunch spot", "Viewing platform"]
+                }
+            ],
+            "cost_details": {
+                "includes": [
+                    "Shivapuri Nagarjun National Park Entry Permit",
+                    "Private vehicle from hotel to Sundarijal",
+                    "Licensed Trekking Guide",
+                    "Bottled water/snacks"
+                ],
+                "excludes": [
+                    "Lunch and additional meals",
+                    "Personal expenses",
+                    "Guide tipping"
+                ]
+            },
+            "media": {
+                "cover_image": "https://images.unsplash.com/photo-1551632811-561732d1e306",
+                "route_image": "https://images.unsplash.com/photo-1551632811-561732d1e306",
+                "gallery": [
+                    "https://images.unsplash.com/photo-1551632811-561732d1e306",
+                    "https://images.unsplash.com/photo-1454496522488-7a8e488e8606",
+                    "https://images.unsplash.com/photo-1519904981063-b0cf448d479e",
+                    "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b",
+                    "https://images.unsplash.com/photo-1506905925346-21bda4d32df4"
+                ]
+            },
+            "status": "active",
+            "last_updated": "2026-03-04"
+        }
+    ]
+}
