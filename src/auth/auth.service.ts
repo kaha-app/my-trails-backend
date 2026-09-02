@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
+import { jwtConfig } from '../config/jwt.config';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -21,11 +22,12 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: '1h',
+      secret: jwtConfig.secret,
     });
 
     const refreshToken = this.jwtService.sign(payload, {
       expiresIn: '7d',
-      secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
+      secret: jwtConfig.refreshSecret,
     });
 
     return { accessToken, refreshToken };
@@ -60,7 +62,8 @@ export class AuthService {
       accessToken,
       refreshToken,
       user: {
-        id: user.id,
+        id: user.id.toString(),
+        userId: user.id.toString(),
         email: user.email,
         fullName: user.fullName,
         role: user.role,
@@ -81,7 +84,8 @@ export class AuthService {
       accessToken,
       refreshToken,
       user: {
-        id: user.id,
+        id: user.id.toString(),
+        userId: user.id.toString(),
         email: user.email,
         fullName: user.fullName,
         role: user.role,
@@ -92,7 +96,7 @@ export class AuthService {
   async refreshAccessToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET || 'refresh-secret-key',
+        secret: jwtConfig.refreshSecret,
       });
 
       const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(

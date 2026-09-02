@@ -63,9 +63,25 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'User profile retrieved' })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'User profile retrieved',
+    schema: {
+      example: {
+        id: '1',
+        userId: '1',
+        email: 'user@example.com',
+        role: 'user'
+      }
+    }
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getProfile(@Request() req: any) {
-    return req.user;
+    return {
+      id: req.user.id.toString(),
+      userId: req.user.id.toString(),
+      email: req.user.email,
+      role: req.user.role,
+    };
   }
 }
