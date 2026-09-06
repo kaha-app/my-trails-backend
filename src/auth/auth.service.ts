@@ -145,4 +145,38 @@ export class AuthService {
       throw new UnauthorizedException('Invalid token');
     }
   }
+
+  async changePassword(userId: bigint, oldPassword: string, newPassword: string, confirmPassword: string) {
+    // Validate new password matches confirm password
+    if (newPassword !== confirmPassword) {
+      throw new BadRequestException('New password and confirm password do not match');
+    }
+
+    // Validate new password is different from old password
+    if (oldPassword === newPassword) {
+      throw new BadRequestException('New password must be different from old password');
+    }
+
+    // Get user by ID (including password hash)
+    const user = await this.usersService.findByIdWithPassword(userId);
+    if (!user || !user.passwordHash) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    // Verify old password
+    const isPasswordValid = await bcrypt.compare(oldPassword, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new BadRequestException('Old password is incorrect');
+    }
+
+    // Hash new password
+    const newPasswordHash = await bcrypt.hash(newPassword, 10);
+
+    // Update password in database
+    await this.usersService.updatePassword(userId, newPasswordHash);
+
+    return {
+      message: 'Password changed successfully',
+    };
+  }
 }

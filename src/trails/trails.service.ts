@@ -155,10 +155,173 @@ export class TrailsService {
       }
     }
 
-    return this.prisma.trail.update({
+    // Extract nested objects
+    const { location, transportation, highlights, pointsOfInterest, costItems, recommendedSeasons, avoidedMonths, safetyItems, ...trailData } = updateTrailDto;
+
+    // Update trail basic info
+    // Cast routeFileType to enum if provided
+    const dataToUpdate: any = { ...trailData };
+    if (dataToUpdate.routeFileType && typeof dataToUpdate.routeFileType === 'string') {
+      dataToUpdate.routeFileType = dataToUpdate.routeFileType as any;
+    }
+
+    const updatedTrail = await this.prisma.trail.update({
       where: { id },
-      data: updateTrailDto,
+      data: dataToUpdate,
     });
+
+    // Update location if provided
+    if (location) {
+      const { ...locationData } = location;
+      await this.prisma.trailLocation.upsert({
+        where: { trailId: id },
+        update: locationData,
+        create: {
+          trailId: id,
+          region: locationData.region || '',
+          country: locationData.country || '',
+        },
+      });
+    }
+
+    // Update transportation if provided
+    if (transportation) {
+      await this.prisma.trailTransportation.upsert({
+        where: { trailId: id },
+        update: transportation,
+        create: {
+          trailId: id,
+          ...transportation,
+        },
+      });
+    }
+
+    // Update highlights if provided
+    if (highlights && Array.isArray(highlights)) {
+      // Delete existing highlights
+      await this.prisma.trailHighlight.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new highlights
+      for (const highlight of highlights) {
+        await this.prisma.trailHighlight.create({
+          data: {
+            trailId: id,
+            text: highlight.text,
+            sortOrder: highlight.sortOrder || 0,
+          },
+        });
+      }
+    }
+
+    // Update points of interest if provided
+    if (pointsOfInterest && Array.isArray(pointsOfInterest)) {
+      // Delete existing POIs
+      await this.prisma.pointOfInterest.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new POIs
+      for (const poi of pointsOfInterest) {
+        await this.prisma.pointOfInterest.create({
+          data: {
+            trailId: id,
+            name: poi.name,
+            description: poi.description,
+            distanceKm: poi.distanceKm,
+            icon: poi.icon,
+            altitudeM: poi.altitudeM,
+            facilities: poi.facilities || [],
+            images: poi.images || [],
+            sortOrder: poi.sortOrder || 0,
+          },
+        });
+      }
+    }
+
+    // Update cost items if provided
+    if (costItems && Array.isArray(costItems)) {
+      // Delete existing cost items
+      await this.prisma.trailCostItem.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new cost items
+      for (const item of costItems) {
+        await this.prisma.trailCostItem.create({
+          data: {
+            trailId: id,
+            type: item.type as any,
+            text: item.text,
+            sortOrder: item.sortOrder || 0,
+          },
+        });
+      }
+    }
+
+    // Update recommended seasons if provided
+    if (recommendedSeasons && Array.isArray(recommendedSeasons)) {
+      // Delete existing seasons
+      await this.prisma.trailRecommendedSeason.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new seasons
+      for (const season of recommendedSeasons) {
+        await this.prisma.trailRecommendedSeason.create({
+          data: {
+            trailId: id,
+            season: season.season,
+            sortOrder: season.sortOrder || 0,
+          },
+        });
+      }
+    }
+
+    // Update avoided months if provided
+    if (avoidedMonths && Array.isArray(avoidedMonths)) {
+      // Delete existing months
+      await this.prisma.trailAvoidedMonth.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new months
+      for (const month of avoidedMonths) {
+        await this.prisma.trailAvoidedMonth.create({
+          data: {
+            trailId: id,
+            monthLabel: month.monthLabel,
+            monthNumber: month.monthNumber,
+            reason: month.reason,
+            sortOrder: month.sortOrder || 0,
+          },
+        });
+      }
+    }
+
+    // Update safety items if provided
+    if (safetyItems && Array.isArray(safetyItems)) {
+      // Delete existing safety items
+      await this.prisma.trailSafetyItem.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new safety items
+      for (const item of safetyItems) {
+        await this.prisma.trailSafetyItem.create({
+          data: {
+            trailId: id,
+            type: item.type as any,
+            text: item.text,
+            sortOrder: item.sortOrder || 0,
+          },
+        });
+      }
+    }
+
+    // Return updated trail with all details
+    return this.findById(id);
   }
 
   async remove(id: bigint) {

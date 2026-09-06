@@ -554,3 +554,111 @@ model HikeWaypointPhoto {
   @@index([userId])
   @@index([timestamp])
 }
+
+// Sync Queue Models for Offline Hike Synchronization
+enum SyncStatus {
+  pending
+  synced
+  failed
+}
+
+enum QueueEventType {
+  create
+  update
+  delete
+}
+
+model HikeSyncStatus {
+  id                  BigInt   @id @default(autoincrement())
+  sessionId           String   @unique
+  userId              BigInt
+  localHikeId         String?  @db.VarChar(100)
+  isSynced            Boolean  @default(false)
+  lastSyncAttempt     DateTime?
+  lastSyncSuccess     DateTime?
+  syncFailureReason   String?
+  retryCount          Int      @default(0)
+  maxRetries          Int      @default(3)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  session             HikeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isSynced])
+  @@index([sessionId])
+  @@index([isSynced, retryCount])
+}
+
+model OutboxQueue {
+  id                  BigInt   @id @default(autoincrement())
+  sessionId           String
+  userId              BigInt
+  eventType           QueueEventType
+  entityType          String   @db.VarChar(50)
+  entityId            String   @db.VarChar(100)
+  payload             Json
+  status              SyncStatus @default(pending)
+  processedAt         DateTime?
+  error               String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model RetryQueue {
+  id                  BigInt   @id @default(autoincrement())
+  outboxQueueId       BigInt   @unique
+  userId              BigInt
+  sessionId           String
+  eventType           QueueEventType
+  entityType          String   @db.VarChar(50)
+  entityId            String   @db.VarChar(100)
+  payload             Json
+  retryCount          Int      @default(0)
+  maxRetries          Int      @default(3)
+  lastError           String?
+  nextRetryAt         DateTime
+  status              SyncStatus @default(pending)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  outboxQueue         OutboxQueue @relation(fields: [outboxQueueId], references: [id], onDelete: Cascade)
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([nextRetryAt])
+  @@index([retryCount])
+}
+
+model AcknowledgementQueue {
+  id                  BigInt   @id @default(autoincrement())
+  sessionId           String
+  userId              BigInt
+  outboxQueueId       BigInt
+  status              String   @db.VarChar(50)
+  acknowledgedData    Json?
+  conflictResolution  Json?
+  isConflict          Boolean  @default(false)
+  conflictType        String?  @db.VarChar(100)
+  resolvedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([status])
+  @@index([isConflict])
+  @@index([createdAt])
+}

@@ -143,4 +143,17 @@ export class UsersService {
       data: { lastLoginAt: new Date() },
     });
   }
+
+  async updatePassword(id: bigint, newPasswordHash: string) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { passwordHash: newPasswordHash },
+    });
+  }
+
+  async findByIdWithPassword(id: bigint) {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
+  }
 }
