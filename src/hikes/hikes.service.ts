@@ -1,17 +1,21 @@
 import {
   Injectable,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../common/upload.service';
+import { OutboxService } from '../sync/outbox.service';
 
 @Injectable()
 export class HikesService {
   private prismaAny: any;
+  private readonly logger = new Logger(HikesService.name);
 
   constructor(
     private prisma: PrismaService,
     private uploadService: UploadService,
+    private outboxService?: OutboxService,
   ) {
     this.prismaAny = this.prisma as any;
   }
@@ -30,11 +34,13 @@ export class HikesService {
     if (!syncHikeData.waypoints) syncHikeData.waypoints = [];
     if (!syncHikeData.userId) throw new BadRequestException('userId is required');
 
+    const userId = BigInt(syncHikeData.userId);
+
     // Create hike session
     const session = await this.prismaAny.hikeSession.create({
       data: {
         trailId: BigInt(syncHikeData.trailId || 0),
-        userId: BigInt(syncHikeData.userId),
+        userId,
         startTime: new Date(syncHikeData.startTime),
         endTime: syncHikeData.endTime ? new Date(syncHikeData.endTime) : null,
         status: syncHikeData.status || 'completed',
@@ -47,9 +53,8 @@ export class HikesService {
     if (photoFiles && photoFiles.length > 0) {
       for (const file of photoFiles) {
         const photoUrl = this.uploadService.uploadHikePhoto(file);
-        // Extract photo ID from filename or field name
         const photoId = file.originalname.replace(/\.[^/.]+$/, '') || file.fieldname;
-        photoMap.set(photoId, { serverId: 0, url: photoUrl }); // serverId placeholder
+        photoMap.set(photoId, { serverId: 0, url: photoUrl });
       }
     }
 
@@ -59,8 +64,10 @@ export class HikesService {
         sessionId: session.id,
         latitude: tp.latitude,
         longitude: tp.longitude,
-        altitude: tp.altitude,
+        elevation: tp.elevation || tp.altitude,
         accuracy: tp.accuracy,
+        heading: tp.heading,
+        speed: tp.speed,
         timestamp: new Date(tp.timestamp || Date.now()),
       }));
 
@@ -68,7 +75,6 @@ export class HikesService {
         data: trackPoints,
       });
 
-      // Calculate distance and altitude from track points
       const totalDistance = this.calculateDistance(syncHikeData.trackPoints);
       const { minAltitude, maxAltitude } = this.calculateAltitudeStats(syncHikeData.trackPoints);
       const totalAltitude = maxAltitude - minAltitude;
@@ -76,10 +82,10 @@ export class HikesService {
       await this.prismaAny.hikeSession.update({
         where: { id: session.id },
         data: {
-          totalDistance: totalDistance,
-          totalAltitude: totalAltitude,
-          maxAltitude: maxAltitude,
-          minAltitude: minAltitude,
+          totalDistance,
+          totalAltitude,
+          maxAltitude,
+          minAltitude,
         },
       });
     }
@@ -92,7 +98,7 @@ export class HikesService {
           data: {
             sessionId: session.id,
             trailId: BigInt(syncHikeData.trailId || 0),
-            userId: BigInt(syncHikeData.userId),
+            userId,
             name: wp.name,
             description: wp.description,
             type: wp.type,
@@ -100,7 +106,9 @@ export class HikesService {
             longitude: wp.longitude,
             elevation: wp.elevation,
             facilities: wp.facilities || [],
+            conditions: wp.conditions,
             distanceFromStart: wp.distanceFromStart,
+            durationAtStart: wp.durationAtStart,
             timestamp: new Date(wp.timestamp || Date.now()),
           },
         });
@@ -114,9 +122,12 @@ export class HikesService {
               const photo = await this.prismaAny.hikeWaypointPhoto.create({
                 data: {
                   waypointId: waypoint.id,
-                  userId: BigInt(syncHikeData.userId),
+                  userId,
                   photoUrl: photoInfo.url,
-                  thumbnail: photoInfo.url, // Could generate thumbnail later
+                  thumbnail: photoInfo.url,
+                  latitude: wp.latitude,
+                  longitude: wp.longitude,
+                  elevation: wp.elevation,
                   timestamp: new Date(),
                 },
               });
@@ -138,6 +149,45 @@ export class HikesService {
       }
     }
 
+    // Create sync status record
+    await this.prismaAny.hikeSyncStatus.create({
+      data: {
+        sessionId: session.id,
+        userId,
+        isSynced: true,
+        lastSyncSuccess: new Date(),
+      },
+    });
+
+    // Add to outbox queue for processing
+    if (this.outboxService) {
+      try {
+        await this.outboxService.addToOutbox(
+          session.id,
+          userId,
+          'create',
+          'hikeSession',
+          session.id,
+          {
+            sessionId: session.id,
+            trailId: session.trailId,
+            userId: session.userId,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            status: session.status,
+            totalDistance: session.totalDistance,
+            totalAltitude: session.totalAltitude,
+            trackPointsCount: syncHikeData.trackPoints.length,
+            waypointsCount: recordedWaypoints.length,
+            photosCount: photoFiles?.length || 0,
+          },
+        );
+        this.logger.log(`Added hike ${session.id} to outbox for sync`);
+      } catch (error) {
+        this.logger.warn(`Failed to add to outbox: ${error.message}`);
+      }
+    }
+
     return {
       success: true,
       sessionId: session.id,
@@ -151,7 +201,13 @@ export class HikesService {
       trackPointsCount: syncHikeData.trackPoints.length,
       waypointsCount: syncHikeData.waypoints.length,
       photosCount: photoFiles ? photoFiles.length : 0,
-      recordedWaypoints: recordedWaypoints,
+      recordedWaypoints,
+      syncStatus: {
+        isSynced: true,
+        lastSyncAttempt: new Date().toISOString(),
+        lastSyncSuccess: new Date().toISOString(),
+        retryCount: 0,
+      },
       message: `Hike synced successfully with ${photoFiles ? photoFiles.length : 0} photos`,
     };
   }

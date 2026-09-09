@@ -152,12 +152,12 @@ export class TrailsController {
   @Post(':id/publish')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Publish a trail (change status to active)' })
-  @ApiResponse({ status: 200, description: 'Trail published successfully' })
+  @ApiOperation({ summary: 'Toggle trail status between active and draft' })
+  @ApiResponse({ status: 200, description: 'Trail status updated successfully' })
   @ApiResponse({ status: 404, description: 'Trail not found' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async publish(@Param('id') id: string) {
-    return this.trailsService.publish(BigInt(id));
+    return this.trailsService.togglePublish(BigInt(id));
   }
 
   @Post(':id/phases')

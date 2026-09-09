@@ -354,6 +354,24 @@ export class TrailsService {
     });
   }
 
+  async togglePublish(id: bigint) {
+    const trail = await this.findById(id);
+
+    if (!trail) {
+      throw new NotFoundException('Trail not found');
+    }
+
+    const newStatus = trail.status === 'active' ? 'draft' : 'active';
+
+    return this.prisma.trail.update({
+      where: { id },
+      data: {
+        status: newStatus,
+        publishedAt: newStatus === 'active' ? new Date() : null,
+      },
+    });
+  }
+
   // Individual add methods for step-by-step trail creation
   async addItineraryPhase(id: bigint, phaseData: any) {
     await this.findById(id);

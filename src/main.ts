@@ -90,9 +90,9 @@ async function bootstrap() {
   SwaggerModule.setup('api', app, document);
 
   const port = process.env.PORT ?? 4000;
-  await app.listen(port,'0.0.0.0');
-  console.log(`✅ Server is running on http://localhost:${port}`);
-  console.log(`📚 Swagger UI available at http://localhost:${port}/api`);
+  await app.listen(port, '0.0.0.0');
+  console.log(`✅ Server is running on http://0.0.0.0:${port} (accessible from http://192.168.1.68:${port})`);
+  console.log(`📚 Swagger UI available at http://0.0.0.0:${port}/api`);
   console.log(`📁 Static files served from /uploads and /assets`);
 }
 

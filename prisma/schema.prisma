@@ -125,6 +125,10 @@ model User {
   hikeSessions  HikeSession[]
   hikeWaypoints HikeWaypoint[]
   hikePhotos    HikeWaypointPhoto[]
+  hikeSyncTrackersAsUser HikeSyncTracker[] @relation("HikeSyncTrackerUser")
+  hikeSyncTrackersAsOwner HikeSyncTracker[] @relation("HikeSyncTrackerOwner")
+  multiDayHikeSyncsAsUser MultiDayHikeSync[] @relation("MultiDayHikeSyncUser")
+  multiDayHikeSyncsAsOwner MultiDayHikeSync[] @relation("MultiDayHikeSyncOwner")
 
   @@index([email])
   @@index([phone])
@@ -555,110 +559,109 @@ model HikeWaypointPhoto {
   @@index([timestamp])
 }
 
-// Sync Queue Models for Offline Hike Synchronization
+// Sync tracking models
 enum SyncStatus {
   pending
+  uploading
   synced
   failed
+  conflict
 }
 
-enum QueueEventType {
-  create
-  update
-  delete
-}
-
-model HikeSyncStatus {
+model HikeSyncTracker {
   id                  BigInt   @id @default(autoincrement())
-  sessionId           String   @unique
+  sessionId           String?  // Optional: link to HikeSession if created
   userId              BigInt
-  localHikeId         String?  @db.VarChar(100)
-  isSynced            Boolean  @default(false)
-  lastSyncAttempt     DateTime?
-  lastSyncSuccess     DateTime?
-  syncFailureReason   String?
-  retryCount          Int      @default(0)
-  maxRetries          Int      @default(3)
+  clientUuid          String   @unique // Stable UUID from client
+  ownerUserId         BigInt   // Account that owns the record
+  serverId            String?  // Server identity after sync
+  localRevision       Int      @default(1)
+  syncedRevision      Int?     // Last acknowledged revision
+  serverVersion       Int?     // Detect conflicts
+  syncStatus          SyncStatus @default(pending)
+  lastSyncedAt        DateTime?
+  lastSyncError       String?
+  multiDayHikeSyncId  BigInt?  // Link to multi-day group if applicable
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  session             HikeSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User @relation("HikeSyncTrackerUser", fields: [userId], references: [id], onDelete: Cascade)
+  ownerUser           User @relation("HikeSyncTrackerOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  multiDayHike        MultiDayHikeSync? @relation(fields: [multiDayHikeSyncId], references: [id], onDelete: SetNull)
+  jobRecords          SyncJobRecord[]
+  mediaMapping        SyncMediaMapping[]
 
+  @@unique([ownerUserId, clientUuid])
   @@index([userId])
-  @@index([isSynced])
-  @@index([sessionId])
-  @@index([isSynced, retryCount])
+  @@index([ownerUserId])
+  @@index([syncStatus])
+  @@index([lastSyncedAt])
+  @@index([multiDayHikeSyncId])
 }
 
-model OutboxQueue {
+model SyncMediaMapping {
   id                  BigInt   @id @default(autoincrement())
-  sessionId           String
-  userId              BigInt
-  eventType           QueueEventType
-  entityType          String   @db.VarChar(50)
-  entityId            String   @db.VarChar(100)
-  payload             Json
+  hikeSyncTrackerId   BigInt
+  localPath           String   @db.VarChar(500)
+  clientMediaUuid     String   // Stable UUID for the media
+  serverMediaId       String?  // After upload
+  serverMediaUrl      String?  @db.VarChar(500)
+  mediaChecksum       String?  @db.VarChar(64) // SHA256
+  uploadStatus        SyncStatus @default(pending)
+  mediaType           String   // cover, route, gallery, poi
+  waypointClientUuid  String?  // If linked to waypoint
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  hikeSyncTracker     HikeSyncTracker @relation(fields: [hikeSyncTrackerId], references: [id], onDelete: Cascade)
+
+  @@index([hikeSyncTrackerId])
+  @@index([clientMediaUuid])
+  @@index([uploadStatus])
+}
+
+model SyncJobRecord {
+  id                  BigInt   @id @default(autoincrement())
+  hikeSyncTrackerId   BigInt
   status              SyncStatus @default(pending)
-  processedAt         DateTime?
+  revision            Int      // Revision being synced
+  idempotencyKey      String   @unique // clientUuid:revision
+  uploadedAt          DateTime?
+  completedAt         DateTime?
   error               String?
   createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
 
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hikeSyncTracker     HikeSyncTracker @relation(fields: [hikeSyncTrackerId], references: [id], onDelete: Cascade)
 
-  @@index([userId])
+  @@index([hikeSyncTrackerId])
   @@index([status])
-  @@index([sessionId])
-  @@index([createdAt])
-  @@index([status, createdAt])
+  @@index([revision])
 }
 
-model RetryQueue {
+model MultiDayHikeSync {
   id                  BigInt   @id @default(autoincrement())
-  outboxQueueId       BigInt   @unique
   userId              BigInt
-  sessionId           String
-  eventType           QueueEventType
-  entityType          String   @db.VarChar(50)
-  entityId            String   @db.VarChar(100)
-  payload             Json
-  retryCount          Int      @default(0)
-  maxRetries          Int      @default(3)
-  lastError           String?
-  nextRetryAt         DateTime
-  status              SyncStatus @default(pending)
+  clientUuid          String   @unique
+  ownerUserId         BigInt
+  serverId            String?
+  name                String   @db.VarChar(255)
+  description         String?
+  status              String   @default("active") @db.VarChar(50)
+  localRevision       Int      @default(1)
+  syncedRevision      Int?
+  serverVersion       Int?
+  syncStatus          SyncStatus @default(pending)
+  lastSyncedAt        DateTime?
+  lastSyncError       String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
-  outboxQueue         OutboxQueue @relation(fields: [outboxQueueId], references: [id], onDelete: Cascade)
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User @relation("MultiDayHikeSyncUser", fields: [userId], references: [id], onDelete: Cascade)
+  owner               User @relation("MultiDayHikeSyncOwner", fields: [ownerUserId], references: [id], onDelete: Cascade)
+  sessions            HikeSyncTracker[] // Sessions that are part of this multi-day group
 
+  @@unique([ownerUserId, clientUuid])
   @@index([userId])
-  @@index([status])
-  @@index([nextRetryAt])
-  @@index([retryCount])
-}
-
-model AcknowledgementQueue {
-  id                  BigInt   @id @default(autoincrement())
-  sessionId           String
-  userId              BigInt
-  outboxQueueId       BigInt
-  status              String   @db.VarChar(50)
-  acknowledgedData    Json?
-  conflictResolution  Json?
-  isConflict          Boolean  @default(false)
-  conflictType        String?  @db.VarChar(100)
-  resolvedAt          DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([sessionId])
-  @@index([status])
-  @@index([isConflict])
-  @@index([createdAt])
+  @@index([ownerUserId])
+  @@index([syncStatus])
 }
