@@ -307,6 +307,7 @@ model PointOfInterest {
   trailId         BigInt
   name            String   @db.VarChar(255)
   description     String?
+  type            String?  @db.VarChar(50)
   distanceKm      Decimal? @db.Decimal(8, 2)
   icon            String?  @db.VarChar(100)
   latitude        Decimal? @db.Decimal(10, 7)

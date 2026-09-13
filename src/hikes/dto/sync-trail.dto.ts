@@ -17,9 +17,11 @@ export class SyncWaypointDto {
   longitude: number;
   elevation?: number;
   distanceFromStart?: number;
+  distanceAlong?: number; // Alternative field name from Flutter
   durationAtStart?: string;
   timestamp: string; // ISO-8601
   createdTime?: string;
+  createdAt?: string; // Alternative field name
   facilities?: string[];
   conditions?: string;
   photoClientUuids?: string[];
@@ -62,6 +64,8 @@ export class SyncTrailDto {
   maxAltitude?: number; // meters
   duration?: string; // days
   description?: string;
+  gpxFilePath?: string; // GPX file path or URL
+  gpxFileType?: string; // gpx, kmz, kml, geojson, etc.
   transportation?: {
     privateOption?: string;
     publicOption?: string;

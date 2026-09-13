@@ -13,8 +13,6 @@ import * as crypto from 'crypto';
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
-
-  // Configuration limits
   private readonly MAX_TRACK_POINTS = 100000;
   private readonly MAX_WAYPOINTS = 10000;
   private readonly MAX_IMAGES = 500;
@@ -33,17 +31,13 @@ export class SyncService {
     imageFiles?: Map<string, Express.Multer.File>,
   ): Promise<SyncResponseDto> {
     try {
-      // Validate schema version
       if (requestData.schemaVersion !== 1) {
         throw new BadRequestException(`Unsupported schema version: ${requestData.schemaVersion}`);
       }
 
-      // Validate required fields
       this.validateSyncRequest(requestData);
 
       const { clientUuid, localRevision } = requestData;
-
-      // Type cast Prisma client to access dynamic models
       const db = this.prisma as any;
 
       // Validate idempotency key
@@ -52,10 +46,10 @@ export class SyncService {
         throw new BadRequestException('Idempotency key does not match request');
       }
 
-      // Check for existing job with same idempotency key FIRST (for idempotent retries)
+      // Check for existing job (idempotent retries)
       const existingJob = await db.syncJobRecord.findUnique({
         where: { idempotencyKey },
-      }).catch(() => null); // Catch if table doesn't exist yet
+      }).catch(() => null);
 
       if (existingJob && existingJob.completedAt) {
         const tracker = await db.hikeSyncTracker.findUnique({
@@ -78,7 +72,7 @@ export class SyncService {
         throw new ForbiddenException('Cannot upload records belonging to another user');
       }
 
-      // Check for conflicts if record exists
+      // Check for conflicts
       if (
         existingTracker &&
         requestData.baseServerVersion &&
@@ -126,21 +120,16 @@ export class SyncService {
           db,
         );
 
-        // Create serverId if not exists
-        const serverId = existingTracker.serverId || generateId();
+        // Create actual trail entry with synced hike details
+        const trailId = await this.createTrailFromSync(requestData.trail, db);
 
-        // Update tracker with server ID
-        await db.hikeSyncTracker.update({
-          where: { id: existingTracker.id },
-          data: { serverId },
-        });
-
-        // Create or get session
+        // Create sessions linked to the new trail
         const sessionMappings = await this.syncRecordingSessions(
           existingTracker,
           userId,
           requestData.sessions || [],
           db,
+          trailId,
         );
 
         // Create track points
@@ -162,7 +151,7 @@ export class SyncService {
           db,
         );
 
-        // Update tracker to synced
+        // Update tracker to synced with trail ID
         const newServerVersion = (existingTracker.serverVersion || 0) + 1;
         await db.hikeSyncTracker.update({
           where: { id: existingTracker.id },
@@ -170,6 +159,7 @@ export class SyncService {
             syncStatus: 'synced',
             syncedRevision: localRevision,
             serverVersion: newServerVersion,
+            serverId: trailId.toString(),
             lastSyncedAt: new Date(),
             lastSyncError: null,
           },
@@ -185,7 +175,7 @@ export class SyncService {
         });
 
         const response = this.buildSyncResponse(
-          { ...existingTracker, serverId },
+          { ...existingTracker, serverId: trailId.toString() },
           requestData,
           userId,
           {
@@ -196,7 +186,7 @@ export class SyncService {
           },
         );
 
-        this.logger.log(`Synced hike ${clientUuid} for user ${userId} revision ${localRevision}`);
+        this.logger.log(`Synced hike ${clientUuid} for user ${userId} to trail ${trailId}`);
         return response;
       } catch (error) {
         const errorMsg = error.message || 'Unknown sync error';
@@ -207,7 +197,7 @@ export class SyncService {
             status: 'failed',
             error: errorMsg,
           },
-        });
+        }).catch(() => null);
 
         await db.hikeSyncTracker.update({
           where: { id: existingTracker.id },
@@ -215,7 +205,7 @@ export class SyncService {
             syncStatus: 'failed',
             lastSyncError: errorMsg,
           },
-        });
+        }).catch(() => null);
 
         throw error;
       }
@@ -306,35 +296,183 @@ export class SyncService {
     return mediaMapping;
   }
 
+  private async createTrailFromSync(trail: any, db: any): Promise<bigint> {
+    // Map difficulty to valid enum or null
+    const validDifficulties = ['easy', 'easy_to_moderate', 'moderate', 'moderate_to_difficult', 'difficult', 'expert'];
+    const difficulty = trail.difficulty && validDifficulties.includes(trail.difficulty) ? trail.difficulty : null;
+
+    // Parse duration to get label and days
+    let durationDays: number | null = null;
+    let durationLabel: string | null = null;
+    if (trail.duration) {
+      if (typeof trail.duration === 'string') {
+        durationLabel = trail.duration;
+        // Try to parse duration string to extract days (e.g., "1", "1-2", "5-6 hours")
+        const match = trail.duration.match(/^(\d+)/);
+        if (match) {
+          durationDays = parseInt(match[1]);
+        }
+      } else {
+        durationDays = parseFloat(trail.duration.toString());
+        durationLabel = durationDays === 1 ? '1 day' : `${durationDays} days`;
+      }
+    }
+
+    const newTrail = await db.trail.create({
+      data: {
+        slug: trail.name.toLowerCase().replace(/\s+/g, '-'),
+        hikeName: trail.name,
+        description: trail.description || '',
+        activity: trail.activity || 'hiking',
+        difficulty: difficulty,
+        difficultyRating: trail.difficultyRating ? parseFloat(trail.difficultyRating.toString()) : null,
+        distanceMinKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
+        distanceMaxKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
+        walkingTimeMinMinutes: trail.walkingTimeMin ? parseInt(trail.walkingTimeMin.toString()) : null,
+        walkingTimeMaxMinutes: trail.walkingTimeMax ? parseInt(trail.walkingTimeMax.toString()) : null,
+        maxAltitudeM: trail.maxAltitude ? parseInt(trail.maxAltitude.toString()) : null,
+        durationDays: durationDays,
+        durationLabel: durationLabel,
+        routeFilePath: trail.gpxFilePath || null,
+        routeFileType: trail.gpxFileType || null,
+        entryPermitRequired: trail.permitRequired || false,
+        fitnessRequirement: trail.fitnessRequirement || null,
+        bestTimeNotes: trail.bestTimeNotes || null,
+        status: 'draft',
+      },
+    });
+
+    // Add location
+    if (trail.region || trail.country) {
+      await db.trailLocation.create({
+        data: {
+          trailId: newTrail.id,
+          region: trail.region || 'Unknown',
+          country: trail.country || 'Unknown',
+          distanceFromCityKm: trail.distanceFromCityKm ? parseFloat(trail.distanceFromCityKm.toString()) : null,
+          startPoint: trail.startingPoint,
+          latitude: trail.latitude,
+          longitude: trail.longitude,
+        },
+      }).catch(() => null);
+    }
+
+    // Add transportation
+    if (trail.transportation) {
+      await db.trailTransportation.create({
+        data: {
+          trailId: newTrail.id,
+          privateOption: trail.transportation.privateOption,
+          publicOption: trail.transportation.publicOption,
+          returnOption: trail.transportation.returnOption,
+        },
+      }).catch(() => null);
+    }
+
+    // Add highlights
+    if (trail.highlights && Array.isArray(trail.highlights)) {
+      for (let i = 0; i < trail.highlights.length; i++) {
+        await db.trailHighlight.create({
+          data: {
+            trailId: newTrail.id,
+            text: trail.highlights[i],
+            sortOrder: i,
+          },
+        }).catch(() => null);
+      }
+    }
+
+    // Add cost items (inclusions)
+    if (trail.costIncludes && Array.isArray(trail.costIncludes)) {
+      for (let i = 0; i < trail.costIncludes.length; i++) {
+        await db.trailCostItem.create({
+          data: {
+            trailId: newTrail.id,
+            type: 'included',
+            text: trail.costIncludes[i],
+            sortOrder: i,
+          },
+        }).catch(() => null);
+      }
+    }
+
+    // Add cost items (exclusions)
+    if (trail.costExcludes && Array.isArray(trail.costExcludes)) {
+      for (let i = 0; i < trail.costExcludes.length; i++) {
+        await db.trailCostItem.create({
+          data: {
+            trailId: newTrail.id,
+            type: 'excluded',
+            text: trail.costExcludes[i],
+            sortOrder: i,
+          },
+        }).catch(() => null);
+      }
+    }
+
+    // Add itinerary phases
+    if (trail.itinerary && Array.isArray(trail.itinerary)) {
+      for (let phaseIdx = 0; phaseIdx < trail.itinerary.length; phaseIdx++) {
+        const phaseData = trail.itinerary[phaseIdx];
+        try {
+          const phase = await db.itineraryPhase.create({
+            data: {
+              trailId: newTrail.id,
+              phaseNumber: phaseIdx + 1,
+              title: phaseData.title || `Day ${phaseIdx + 1}`,
+              durationLabel: phaseData.durationLabel || null,
+              durationMinutes: phaseData.durationMinutes ? parseInt(phaseData.durationMinutes.toString()) : null,
+              altitudeM: phaseData.altitudeM ? parseInt(phaseData.altitudeM.toString()) : null,
+              sortOrder: phaseIdx,
+            },
+          });
+
+          // Add phase details/description
+          if (phaseData.details && Array.isArray(phaseData.details)) {
+            for (let detailIdx = 0; detailIdx < phaseData.details.length; detailIdx++) {
+              await db.itineraryPhaseDetail.create({
+                data: {
+                  phaseId: phase.id,
+                  detail: phaseData.details[detailIdx],
+                  sortOrder: detailIdx,
+                },
+              }).catch(() => null);
+            }
+          }
+
+          // Also support single description field
+          if (phaseData.description) {
+            await db.itineraryPhaseDetail.create({
+              data: {
+                phaseId: phase.id,
+                detail: phaseData.description,
+                sortOrder: 0,
+              },
+            }).catch(() => null);
+          }
+        } catch (err) {
+          this.logger.warn(`Failed to create itinerary phase ${phaseIdx + 1}: ${err}`);
+        }
+      }
+    }
+
+    this.logger.log(`Created trail ${newTrail.id}: ${trail.name}`);
+    return newTrail.id;
+  }
+
   private async syncRecordingSessions(
     tracker: any,
     userId: bigint,
     sessions: any[],
     db: any,
+    trailId: bigint,
   ): Promise<Map<string, { clientUuid: string; serverId: string }>> {
     const sessionMappings = new Map();
-
-    // Get or create a default trail for synced hikes
-    let defaultTrail = await db.trail.findFirst({
-      where: { slug: 'synced-hikes' },
-    });
-
-    if (!defaultTrail) {
-      defaultTrail = await db.trail.create({
-        data: {
-          slug: 'synced-hikes',
-          hikeName: 'Synced Hikes',
-          description: 'Container for synced hikes',
-          activity: 'hiking',
-          status: 'draft',
-        },
-      });
-    }
 
     for (const session of sessions) {
       const hikeSession = await db.hikeSession.create({
         data: {
-          trailId: defaultTrail.id,
+          trailId,
           userId,
           startTime: new Date(session.startTime),
           endTime: session.endTime ? new Date(session.endTime) : null,
@@ -361,34 +499,7 @@ export class SyncService {
     if (trackPoints.length === 0) return 0;
 
     let sessionId = Array.from(sessionMappings.values())[0]?.serverId;
-    if (!sessionId) {
-      // Get or create default trail
-      let defaultTrail = await db.trail.findFirst({
-        where: { slug: 'synced-hikes' },
-      });
-
-      if (!defaultTrail) {
-        defaultTrail = await db.trail.create({
-          data: {
-            slug: 'synced-hikes',
-            hikeName: 'Synced Hikes',
-            description: 'Container for synced hikes',
-            activity: 'hiking',
-            status: 'draft',
-          },
-        });
-      }
-
-      const session = await db.hikeSession.create({
-        data: {
-          trailId: defaultTrail.id,
-          userId,
-          startTime: new Date(trackPoints[0].timestamp),
-          status: 'completed',
-        },
-      });
-      sessionId = session.id;
-    }
+    if (!sessionId) return 0;
 
     const points = trackPoints.map((tp: any) => ({
       sessionId,
@@ -414,32 +525,21 @@ export class SyncService {
     db: any,
   ): Promise<Map<string, { clientUuid: string; serverId: string }>> {
     const waypointMappings = new Map();
-
-    let sessionId = Array.from(sessionMappings.values())[0]?.serverId;
+    const sessionId = Array.from(sessionMappings.values())[0]?.serverId;
     if (!sessionId) return waypointMappings;
 
-    // Get or create default trail
-    let defaultTrail = await db.trail.findFirst({
-      where: { slug: 'synced-hikes' },
-    });
-
-    if (!defaultTrail) {
-      defaultTrail = await db.trail.create({
-        data: {
-          slug: 'synced-hikes',
-          hikeName: 'Synced Hikes',
-          description: 'Container for synced hikes',
-          activity: 'hiking',
-          status: 'draft',
-        },
-      });
-    }
+    // Get trail from first session
+    const session = await db.hikeSession.findUnique({ where: { id: sessionId } });
+    if (!session) return waypointMappings;
 
     for (const wp of waypoints) {
+      // Handle both distanceFromStart and distanceAlong field names
+      const distance = wp.distanceFromStart || wp.distanceAlong;
+      
       const waypoint = await db.hikeWaypoint.create({
         data: {
           sessionId,
-          trailId: defaultTrail.id,
+          trailId: session.trailId,
           userId,
           name: wp.name,
           description: wp.description,
@@ -449,7 +549,7 @@ export class SyncService {
           elevation: wp.elevation,
           facilities: wp.facilities || [],
           conditions: wp.conditions,
-          distanceFromStart: wp.distanceFromStart,
+          distanceFromStart: distance,
           durationAtStart: wp.durationAtStart,
           timestamp: new Date(wp.timestamp),
         },
@@ -458,6 +558,24 @@ export class SyncService {
       waypointMappings.set(wp.clientUuid, {
         clientUuid: wp.clientUuid,
         serverId: waypoint.id,
+      });
+
+      // Also create as POI (PointOfInterest) for the trail
+      await db.pointOfInterest.create({
+        data: {
+          trailId: session.trailId,
+          name: wp.name,
+          description: wp.description,
+          latitude: wp.latitude,
+          longitude: wp.longitude,
+          altitudeM: wp.elevation,
+          distanceKm: distance,
+          type: wp.type,
+          facilities: wp.facilities || [],
+        },
+      }).catch((err) => {
+        this.logger.warn(`Failed to create POI: ${err.message}`);
+        // Don't throw - continue if POI creation fails
       });
 
       // Link photos
