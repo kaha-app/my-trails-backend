@@ -95,6 +95,16 @@ class PointOfInterestDto {
   @IsString()
   description?: string;
 
+  @ApiProperty({ required: false, example: '27.6735' })
+  @IsOptional()
+  @IsString()
+  latitude?: string;
+
+  @ApiProperty({ required: false, example: '85.3125' })
+  @IsOptional()
+  @IsString()
+  longitude?: string;
+
   @ApiProperty({ required: false, example: '1.2' })
   @IsOptional()
   @IsString()
@@ -188,6 +198,58 @@ class SafetyItemDto {
   @IsOptional()
   @IsNumber()
   sortOrder?: number;
+}
+
+class ItineraryPhaseDetailDto {
+  @ApiProperty({ example: 'Start at 6 AM from hotel' })
+  @IsString()
+  detail: string;
+
+  @ApiProperty({ required: false, example: 0 })
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+}
+
+class ItineraryPhaseDto {
+  @ApiProperty({ example: 1 })
+  @IsNumber()
+  phaseNumber: number;
+
+  @ApiProperty({ example: 'Day 1: Hotel to Base Camp' })
+  @IsString()
+  title: string;
+
+  @ApiProperty({ required: false, example: '4 hours' })
+  @IsOptional()
+  @IsString()
+  durationLabel?: string;
+
+  @ApiProperty({ required: false, example: 240 })
+  @IsOptional()
+  @IsNumber()
+  durationMinutes?: number;
+
+  @ApiProperty({ required: false, example: 2500 })
+  @IsOptional()
+  @IsNumber()
+  altitudeM?: number;
+
+  @ApiProperty({ required: false, example: 0 })
+  @IsOptional()
+  @IsNumber()
+  sortOrder?: number;
+
+  @ApiProperty({
+    required: false,
+    type: [ItineraryPhaseDetailDto],
+    description: 'Phase details (optional)'
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ItineraryPhaseDetailDto)
+  details?: ItineraryPhaseDetailDto[];
 }
 
 export class UpdateTrailDto {
@@ -400,6 +462,17 @@ export class UpdateTrailDto {
   @ValidateNested({ each: true })
   @Type(() => HighlightDto)
   highlights?: HighlightDto[];
+
+  @ApiProperty({
+    required: false,
+    type: [ItineraryPhaseDto],
+    description: 'Itinerary phases (optional)'
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ItineraryPhaseDto)
+  itineraryPhases?: ItineraryPhaseDto[];
 
   @ApiProperty({
     required: false,

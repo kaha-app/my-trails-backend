@@ -131,9 +131,13 @@ export class TrailsService {
     // Extract cover photo from media array for convenience
     const coverPhoto = trail.media.find((m: any) => m.type === 'cover');
 
+    // Build GPX download URL if GPX file exists
+    const routeFileUrl = trail.routeFilePath ? `/api/trails/${id}/download-gpx` : null;
+
     return {
       ...trail,
       coverPhoto,
+      routeFileUrl, // Add download URL for frontend to use
     };
   }
 
@@ -156,7 +160,7 @@ export class TrailsService {
     }
 
     // Extract nested objects
-    const { location, transportation, highlights, pointsOfInterest, costItems, recommendedSeasons, avoidedMonths, safetyItems, ...trailData } = updateTrailDto;
+    const { location, transportation, highlights, itineraryPhases, pointsOfInterest, costItems, recommendedSeasons, avoidedMonths, safetyItems, ...trailData } = updateTrailDto;
 
     // Update trail basic info
     // Cast routeFileType to enum if provided
@@ -215,6 +219,42 @@ export class TrailsService {
       }
     }
 
+    // Update itinerary phases if provided
+    if (itineraryPhases && Array.isArray(itineraryPhases)) {
+      // Delete existing phases and their details
+      await this.prisma.itineraryPhase.deleteMany({
+        where: { trailId: id },
+      });
+
+      // Create new phases with details
+      for (const phase of itineraryPhases) {
+        const newPhase = await this.prisma.itineraryPhase.create({
+          data: {
+            trailId: id,
+            phaseNumber: phase.phaseNumber,
+            title: phase.title,
+            durationLabel: phase.durationLabel || null,
+            durationMinutes: phase.durationMinutes || null,
+            altitudeM: phase.altitudeM || null,
+            sortOrder: phase.sortOrder || 0,
+          },
+        });
+
+        // Add phase details
+        if (phase.details && Array.isArray(phase.details)) {
+          for (const detail of phase.details) {
+            await this.prisma.itineraryPhaseDetail.create({
+              data: {
+                phaseId: newPhase.id,
+                detail: detail.detail,
+                sortOrder: detail.sortOrder || 0,
+              },
+            });
+          }
+        }
+      }
+    }
+
     // Update points of interest if provided
     if (pointsOfInterest && Array.isArray(pointsOfInterest)) {
       // Delete existing POIs
@@ -229,7 +269,9 @@ export class TrailsService {
             trailId: id,
             name: poi.name,
             description: poi.description,
-            distanceKm: poi.distanceKm,
+            latitude: poi.latitude ? parseFloat(poi.latitude) : null,
+            longitude: poi.longitude ? parseFloat(poi.longitude) : null,
+            distanceKm: poi.distanceKm ? parseFloat(poi.distanceKm) : null,
             icon: poi.icon,
             altitudeM: poi.altitudeM,
             facilities: poi.facilities || [],
@@ -608,5 +650,26 @@ export class TrailsService {
         routeFileType: 'gpx',
       },
     });
+  }
+
+  async downloadGpx(id: bigint) {
+    const trail = await this.prisma.trail.findUnique({
+      where: { id },
+    });
+
+    if (!trail) {
+      throw new NotFoundException('Trail not found');
+    }
+
+    if (!trail.routeFilePath) {
+      throw new NotFoundException('No GPX file available for this trail');
+    }
+
+    // routeFilePath is stored as /uploads/gpx/filename
+    // We need to convert it to the actual file path
+    const filePath = `.${trail.routeFilePath}`;
+
+    // Return file stream
+    return this.uploadService.getFileStream(filePath);
   }
 }

@@ -12,6 +12,8 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFiles,
+  Response,
+  StreamableFile,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
@@ -113,6 +115,22 @@ export class TrailsController {
     };
 
     return this.trailsService.findAll(skipNum, takeNum, filters);
+  }
+
+  @Get(':id/download-gpx')
+  @ApiOperation({ summary: 'Download GPX file for trail' })
+  @ApiResponse({ status: 200, description: 'GPX file downloaded successfully' })
+  @ApiResponse({ status: 404, description: 'Trail or GPX file not found' })
+  async downloadGpx(
+    @Param('id') id: string,
+    @Response({ passthrough: true }) res: any
+  ) {
+    const stream = await this.trailsService.downloadGpx(BigInt(id));
+    res.set({
+      'Content-Type': 'application/gpx+xml',
+      'Content-Disposition': `attachment; filename="trail_${id}.gpx"`,
+    });
+    return new StreamableFile(stream);
   }
 
   @Get(':id')

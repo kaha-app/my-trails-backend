@@ -301,6 +301,19 @@ export class SyncService {
     const validDifficulties = ['easy', 'easy_to_moderate', 'moderate', 'moderate_to_difficult', 'difficult', 'expert'];
     const difficulty = trail.difficulty && validDifficulties.includes(trail.difficulty) ? trail.difficulty : null;
 
+    // Map route file type to valid enum
+    const validFileTypes = ['gpx', 'kmz', 'kml', 'geojson', 'other'];
+    const routeFileType = trail.gpxFileType && validFileTypes.includes(trail.gpxFileType.toLowerCase()) 
+      ? trail.gpxFileType.toLowerCase() 
+      : (trail.gpxFilePath ? 'gpx' : null); // Default to 'gpx' if file path exists but type not specified
+
+    // Extract filename from full path if needed
+    let routeFilePath = trail.gpxFilePath;
+    if (routeFilePath) {
+      // Remove full device path and keep only filename
+      routeFilePath = routeFilePath.split('/').pop() || routeFilePath;
+    }
+
     // Parse duration to get label and days
     let durationDays: number | null = null;
     let durationLabel: string | null = null;
@@ -318,29 +331,51 @@ export class SyncService {
       }
     }
 
-    const newTrail = await db.trail.create({
-      data: {
-        slug: trail.name.toLowerCase().replace(/\s+/g, '-'),
-        hikeName: trail.name,
-        description: trail.description || '',
-        activity: trail.activity || 'hiking',
-        difficulty: difficulty,
-        difficultyRating: trail.difficultyRating ? parseFloat(trail.difficultyRating.toString()) : null,
-        distanceMinKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
-        distanceMaxKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
-        walkingTimeMinMinutes: trail.walkingTimeMin ? parseInt(trail.walkingTimeMin.toString()) : null,
-        walkingTimeMaxMinutes: trail.walkingTimeMax ? parseInt(trail.walkingTimeMax.toString()) : null,
-        maxAltitudeM: trail.maxAltitude ? parseInt(trail.maxAltitude.toString()) : null,
-        durationDays: durationDays,
-        durationLabel: durationLabel,
-        routeFilePath: trail.gpxFilePath || null,
-        routeFileType: trail.gpxFileType || null,
-        entryPermitRequired: trail.permitRequired || false,
-        fitnessRequirement: trail.fitnessRequirement || null,
-        bestTimeNotes: trail.bestTimeNotes || null,
-        status: 'draft',
-      },
-    });
+    // Create unique slug by appending clientUuid to avoid duplicates
+    const baseSlug = trail.name.toLowerCase().replace(/\s+/g, '-');
+    const slug = `${baseSlug}-${trail.clientUuid.substring(0, 8)}`;
+
+    const trailData = {
+      slug,
+      hikeName: trail.name,
+      description: trail.description || '',
+      activity: trail.activity || 'hiking',
+      difficulty: difficulty,
+      difficultyRating: trail.difficultyRating ? parseFloat(trail.difficultyRating.toString()) : null,
+      distanceMinKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
+      distanceMaxKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
+      walkingTimeMinMinutes: trail.walkingTimeMin ? parseInt(trail.walkingTimeMin.toString()) : null,
+      walkingTimeMaxMinutes: trail.walkingTimeMax ? parseInt(trail.walkingTimeMax.toString()) : null,
+      maxAltitudeM: trail.maxAltitude ? parseInt(trail.maxAltitude.toString()) : null,
+      durationDays: durationDays,
+      durationLabel: durationLabel,
+      routeFilePath: routeFilePath,
+      routeFileType: routeFileType,
+      entryPermitRequired: trail.permitRequired || false,
+      fitnessRequirement: trail.fitnessRequirement || null,
+      bestTimeNotes: trail.bestTimeNotes || null,
+      status: 'draft',
+    };
+
+    let newTrail;
+    try {
+      newTrail = await db.trail.create({
+        data: trailData,
+      });
+    } catch (err: any) {
+      // If slug already exists, try with a timestamp
+      if (err.code === 'P2002' && err.meta?.target?.includes('slug')) {
+        const uniqueSlug = `${baseSlug}-${Date.now()}`;
+        newTrail = await db.trail.create({
+          data: {
+            ...trailData,
+            slug: uniqueSlug,
+          },
+        });
+      } else {
+        throw err;
+      }
+    }
 
     // Add location
     if (trail.region || trail.country) {
@@ -469,6 +504,26 @@ export class SyncService {
   ): Promise<Map<string, { clientUuid: string; serverId: string }>> {
     const sessionMappings = new Map();
 
+    // If no sessions provided, create a default one for this sync
+    if (!sessions || sessions.length === 0) {
+      const hikeSession = await db.hikeSession.create({
+        data: {
+          trailId,
+          userId,
+          startTime: new Date(),
+          endTime: null,
+          status: 'completed',
+        },
+      });
+
+      sessionMappings.set('default', {
+        clientUuid: 'default',
+        serverId: hikeSession.id,
+      });
+
+      return sessionMappings;
+    }
+
     for (const session of sessions) {
       const hikeSession = await db.hikeSession.create({
         data: {
@@ -501,16 +556,27 @@ export class SyncService {
     let sessionId = Array.from(sessionMappings.values())[0]?.serverId;
     if (!sessionId) return 0;
 
-    const points = trackPoints.map((tp: any) => ({
-      sessionId,
-      latitude: tp.latitude,
-      longitude: tp.longitude,
-      elevation: tp.altitude || tp.elevation,
-      accuracy: tp.accuracy,
-      heading: tp.heading,
-      speed: tp.speed,
-      timestamp: new Date(tp.timestamp),
-    }));
+    const points = trackPoints.map((tp: any) => {
+      // Parse timestamp safely
+      let timestamp = new Date();
+      if (tp.timestamp) {
+        const parsed = new Date(tp.timestamp);
+        if (!isNaN(parsed.getTime())) {
+          timestamp = parsed;
+        }
+      }
+
+      return {
+        sessionId,
+        latitude: tp.latitude,
+        longitude: tp.longitude,
+        elevation: tp.altitude || tp.elevation,
+        accuracy: tp.accuracy,
+        heading: tp.heading,
+        speed: tp.speed,
+        timestamp: timestamp,
+      };
+    });
 
     await db.trackPoint.createMany({ data: points });
     return points.length;
@@ -536,22 +602,42 @@ export class SyncService {
       // Handle both distanceFromStart and distanceAlong field names
       const distance = wp.distanceFromStart || wp.distanceAlong;
       
+      // Collect image URLs for this waypoint
+      const imageUrls: string[] = [];
+      if (wp.photoClientUuids && Array.isArray(wp.photoClientUuids)) {
+        for (const photoUuid of wp.photoClientUuids) {
+          const photoInfo = mediaMapping.get(photoUuid);
+          if (photoInfo?.url) {
+            imageUrls.push(photoInfo.url);
+          }
+        }
+      }
+
+      // Parse timestamp safely - can be null if parsing fails
+      let timestamp: Date | null = null;
+      if (wp.timestamp) {
+        const parsed = new Date(wp.timestamp);
+        if (!isNaN(parsed.getTime())) {
+          timestamp = parsed;
+        }
+      }
+
       const waypoint = await db.hikeWaypoint.create({
         data: {
-          sessionId,
-          trailId: session.trailId,
-          userId,
+          session: { connect: { id: sessionId } },
+          trail: { connect: { id: session.trailId } },
+          user: { connect: { id: userId } },
           name: wp.name,
           description: wp.description,
-          type: wp.type,
+          type: wp.type || 'other',
           latitude: wp.latitude,
           longitude: wp.longitude,
           elevation: wp.elevation,
           facilities: wp.facilities || [],
-          conditions: wp.conditions,
+          conditions: wp.conditions || null,
           distanceFromStart: distance,
-          durationAtStart: wp.durationAtStart,
-          timestamp: new Date(wp.timestamp),
+          durationAtStart: wp.durationAtStart || null,
+          timestamp: timestamp,
         },
       });
 
@@ -560,25 +646,26 @@ export class SyncService {
         serverId: waypoint.id,
       });
 
-      // Also create as POI (PointOfInterest) for the trail
+      // Also create as POI (PointOfInterest) for the trail with all fields including images
       await db.pointOfInterest.create({
         data: {
           trailId: session.trailId,
           name: wp.name,
-          description: wp.description,
+          description: wp.description || null,
           latitude: wp.latitude,
           longitude: wp.longitude,
           altitudeM: wp.elevation,
           distanceKm: distance,
-          type: wp.type,
+          type: wp.type || 'other',
           facilities: wp.facilities || [],
+          images: imageUrls, // Store image URLs in POI
         },
       }).catch((err) => {
         this.logger.warn(`Failed to create POI: ${err.message}`);
         // Don't throw - continue if POI creation fails
       });
 
-      // Link photos
+      // Link photos to waypoint
       if (wp.photoClientUuids && Array.isArray(wp.photoClientUuids)) {
         for (const photoUuid of wp.photoClientUuids) {
           const photoInfo = mediaMapping.get(photoUuid);
@@ -591,7 +678,7 @@ export class SyncService {
                 latitude: wp.latitude,
                 longitude: wp.longitude,
                 elevation: wp.elevation,
-                timestamp: new Date(),
+                timestamp: timestamp,
               },
             });
           }
