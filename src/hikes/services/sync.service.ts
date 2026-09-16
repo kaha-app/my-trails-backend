@@ -32,7 +32,9 @@ export class SyncService {
   ): Promise<SyncResponseDto> {
     try {
       if (requestData.schemaVersion !== 1) {
-        throw new BadRequestException(`Unsupported schema version: ${requestData.schemaVersion}`);
+        throw new BadRequestException(
+          `Unsupported schema version: ${requestData.schemaVersion}`,
+        );
       }
 
       this.validateSyncRequest(requestData);
@@ -42,34 +44,47 @@ export class SyncService {
 
       // Validate idempotency key
       const [keyClientUuid, keyRevision] = idempotencyKey.split(':');
-      if (keyClientUuid !== clientUuid || parseInt(keyRevision) !== localRevision) {
+      if (
+        keyClientUuid !== clientUuid ||
+        parseInt(keyRevision) !== localRevision
+      ) {
         throw new BadRequestException('Idempotency key does not match request');
       }
 
       // Check for existing job (idempotent retries)
-      const existingJob = await db.syncJobRecord.findUnique({
-        where: { idempotencyKey },
-      }).catch(() => null);
+      const existingJob = await db.syncJobRecord
+        .findUnique({
+          where: { idempotencyKey },
+        })
+        .catch(() => null);
 
       if (existingJob && existingJob.completedAt) {
         const tracker = await db.hikeSyncTracker.findUnique({
           where: { id: existingJob.hikeSyncTrackerId },
         });
-        this.logger.log(`Idempotent retry: returning cached response for ${clientUuid}`);
+        this.logger.log(
+          `Idempotent retry: returning cached response for ${clientUuid}`,
+        );
         return this.buildSyncResponse(tracker, requestData, userId);
       }
 
       if (existingJob && !existingJob.completedAt) {
-        throw new BadRequestException('Sync already in progress for this revision');
+        throw new BadRequestException(
+          'Sync already in progress for this revision',
+        );
       }
 
       // Check ownership
-      let existingTracker = await db.hikeSyncTracker.findUnique({
-        where: { clientUuid },
-      }).catch(() => null);
+      let existingTracker = await db.hikeSyncTracker
+        .findUnique({
+          where: { clientUuid },
+        })
+        .catch(() => null);
 
       if (existingTracker && existingTracker.ownerUserId !== userId) {
-        throw new ForbiddenException('Cannot upload records belonging to another user');
+        throw new ForbiddenException(
+          'Cannot upload records belonging to another user',
+        );
       }
 
       // Check for conflicts
@@ -111,6 +126,38 @@ export class SyncService {
       });
 
       try {
+        // A newer local revision belongs to the same recorded hike. The
+        // tracker already owns its server trail, so acknowledge the revision
+        // against that identity instead of creating another draft card.
+        if (existingTracker.serverId) {
+          const serverTrailId = BigInt(existingTracker.serverId);
+          const serverTrail = await db.trail.findUnique({
+            where: { id: serverTrailId },
+          });
+          if (serverTrail) {
+            const newServerVersion = (existingTracker.serverVersion || 0) + 1;
+            const updatedTracker = await db.hikeSyncTracker.update({
+              where: { id: existingTracker.id },
+              data: {
+                localRevision,
+                syncedRevision: localRevision,
+                serverVersion: newServerVersion,
+                syncStatus: 'synced',
+                lastSyncedAt: new Date(),
+                lastSyncError: null,
+              },
+            });
+            await db.syncJobRecord.update({
+              where: { id: syncJob.id },
+              data: { status: 'synced', completedAt: new Date() },
+            });
+            this.logger.log(
+              `Synced revision ${localRevision} to existing trail ${serverTrailId}`,
+            );
+            return this.buildSyncResponse(updatedTracker, requestData, userId);
+          }
+        }
+
         // Process media uploads
         const mediaMapping = await this.processMediaUploads(
           existingTracker.id,
@@ -125,10 +172,19 @@ export class SyncService {
 
         // Attach uploaded trail images so GET /trails/:id can return them.
         for (const media of requestData.media as any[]) {
-          const uploaded = mediaMapping.get(media.clientUuid ?? media.clientMediaUuid);
+          const uploaded = mediaMapping.get(
+            media.clientUuid ?? media.clientMediaUuid,
+          );
           const type = media.type ?? media.mediaType;
           if (uploaded && ['cover', 'route', 'gallery'].includes(type)) {
-            await db.trailMedia.create({ data: { trailId, type, url: uploaded.url, altText: media.caption ?? null } });
+            await db.trailMedia.create({
+              data: {
+                trailId,
+                type,
+                url: uploaded.url,
+                altText: media.caption ?? null,
+              },
+            });
           }
         }
 
@@ -195,26 +251,32 @@ export class SyncService {
           },
         );
 
-        this.logger.log(`Synced hike ${clientUuid} for user ${userId} to trail ${trailId}`);
+        this.logger.log(
+          `Synced hike ${clientUuid} for user ${userId} to trail ${trailId}`,
+        );
         return response;
       } catch (error) {
         const errorMsg = error.message || 'Unknown sync error';
 
-        await db.syncJobRecord.update({
-          where: { id: syncJob.id },
-          data: {
-            status: 'failed',
-            error: errorMsg,
-          },
-        }).catch(() => null);
+        await db.syncJobRecord
+          .update({
+            where: { id: syncJob.id },
+            data: {
+              status: 'failed',
+              error: errorMsg,
+            },
+          })
+          .catch(() => null);
 
-        await db.hikeSyncTracker.update({
-          where: { id: existingTracker.id },
-          data: {
-            syncStatus: 'failed',
-            lastSyncError: errorMsg,
-          },
-        }).catch(() => null);
+        await db.hikeSyncTracker
+          .update({
+            where: { id: existingTracker.id },
+            data: {
+              syncStatus: 'failed',
+              lastSyncError: errorMsg,
+            },
+          })
+          .catch(() => null);
 
         throw error;
       }
@@ -245,13 +307,19 @@ export class SyncService {
     }
 
     if (data.trackPoints.length > this.MAX_TRACK_POINTS) {
-      throw new BadRequestException(`Track points exceed limit of ${this.MAX_TRACK_POINTS}`);
+      throw new BadRequestException(
+        `Track points exceed limit of ${this.MAX_TRACK_POINTS}`,
+      );
     }
     if (data.waypoints.length > this.MAX_WAYPOINTS) {
-      throw new BadRequestException(`Waypoints exceed limit of ${this.MAX_WAYPOINTS}`);
+      throw new BadRequestException(
+        `Waypoints exceed limit of ${this.MAX_WAYPOINTS}`,
+      );
     }
     if (data.media.length > this.MAX_IMAGES) {
-      throw new BadRequestException(`Images exceed limit of ${this.MAX_IMAGES}`);
+      throw new BadRequestException(
+        `Images exceed limit of ${this.MAX_IMAGES}`,
+      );
     }
   }
 
@@ -261,7 +329,9 @@ export class SyncService {
     mediaList: any[],
     imageFiles: Map<string, Express.Multer.File> | undefined,
     db: any,
-  ): Promise<Map<string, { clientUuid: string; serverMediaId: string; url: string }>> {
+  ): Promise<
+    Map<string, { clientUuid: string; serverMediaId: string; url: string }>
+  > {
     const mediaMapping = new Map();
 
     if (!imageFiles || imageFiles.size === 0) {
@@ -269,7 +339,11 @@ export class SyncService {
     }
 
     for (const original of mediaList) {
-      const media = { ...original, clientUuid: original.clientUuid ?? original.clientMediaUuid, type: original.type ?? original.mediaType };
+      const media = {
+        ...original,
+        clientUuid: original.clientUuid ?? original.clientMediaUuid,
+        type: original.type ?? original.mediaType,
+      };
       const file = imageFiles.get(media.clientUuid);
       if (!file) continue;
 
@@ -299,8 +373,12 @@ export class SyncService {
 
         this.logger.debug(`Uploaded media: ${media.clientUuid}`);
       } catch (error) {
-        this.logger.warn(`Failed to upload media ${media.clientUuid}: ${error.message}`);
-        throw new BadRequestException(`Failed to upload media: ${media.clientUuid}`);
+        this.logger.warn(
+          `Failed to upload media ${media.clientUuid}: ${error.message}`,
+        );
+        throw new BadRequestException(
+          `Failed to upload media: ${media.clientUuid}`,
+        );
       }
     }
 
@@ -309,14 +387,28 @@ export class SyncService {
 
   private async createTrailFromSync(trail: any, db: any): Promise<bigint> {
     // Map difficulty to valid enum or null
-    const validDifficulties = ['easy', 'easy_to_moderate', 'moderate', 'moderate_to_difficult', 'difficult', 'expert'];
-    const difficulty = trail.difficulty && validDifficulties.includes(trail.difficulty) ? trail.difficulty : null;
+    const validDifficulties = [
+      'easy',
+      'easy_to_moderate',
+      'moderate',
+      'moderate_to_difficult',
+      'difficult',
+      'expert',
+    ];
+    const difficulty =
+      trail.difficulty && validDifficulties.includes(trail.difficulty)
+        ? trail.difficulty
+        : null;
 
     // Map route file type to valid enum
     const validFileTypes = ['gpx', 'kmz', 'kml', 'geojson', 'other'];
-    const routeFileType = trail.gpxFileType && validFileTypes.includes(trail.gpxFileType.toLowerCase()) 
-      ? trail.gpxFileType.toLowerCase() 
-      : (trail.gpxFilePath ? 'gpx' : null); // Default to 'gpx' if file path exists but type not specified
+    const routeFileType =
+      trail.gpxFileType &&
+      validFileTypes.includes(trail.gpxFileType.toLowerCase())
+        ? trail.gpxFileType.toLowerCase()
+        : trail.gpxFilePath
+          ? 'gpx'
+          : null; // Default to 'gpx' if file path exists but type not specified
 
     // Extract filename from full path if needed
     let routeFilePath = trail.gpxFilePath;
@@ -352,12 +444,25 @@ export class SyncService {
       description: trail.description || '',
       activity: trail.activity || 'hiking',
       difficulty: difficulty,
-      difficultyRating: trail.difficultyRating ? parseFloat(trail.difficultyRating.toString()) : null,
-      distanceMinKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
-      distanceMaxKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
-      walkingTimeMinMinutes: trail.walkingTimeMin ? parseInt(trail.walkingTimeMin.toString()) : null,
-      walkingTimeMaxMinutes: trail.walkingTimeMax ? parseInt(trail.walkingTimeMax.toString()) : null,
-      maxAltitudeM: trail.maxAltitudeM != null || trail.maxAltitude != null ? Math.round(Number(trail.maxAltitudeM ?? trail.maxAltitude)) : null,
+      difficultyRating: trail.difficultyRating
+        ? parseFloat(trail.difficultyRating.toString())
+        : null,
+      distanceMinKm: trail.distance
+        ? parseFloat(trail.distance.toString())
+        : null,
+      distanceMaxKm: trail.distance
+        ? parseFloat(trail.distance.toString())
+        : null,
+      walkingTimeMinMinutes: trail.walkingTimeMin
+        ? parseInt(trail.walkingTimeMin.toString())
+        : null,
+      walkingTimeMaxMinutes: trail.walkingTimeMax
+        ? parseInt(trail.walkingTimeMax.toString())
+        : null,
+      maxAltitudeM:
+        trail.maxAltitudeM != null || trail.maxAltitude != null
+          ? Math.round(Number(trail.maxAltitudeM ?? trail.maxAltitude))
+          : null,
       durationDays: durationDays,
       durationLabel: durationLabel,
       routeFilePath: routeFilePath,
@@ -390,69 +495,81 @@ export class SyncService {
 
     // Add location
     if (trail.region || trail.country) {
-      await db.trailLocation.create({
-        data: {
-          trailId: newTrail.id,
-          region: trail.region || 'Unknown',
-          country: trail.country || 'Unknown',
-          distanceFromCityKm: trail.distanceFromCityKm ? parseFloat(trail.distanceFromCityKm.toString()) : null,
-          startPoint: trail.startingPoint,
-          latitude: trail.latitude,
-          longitude: trail.longitude,
-        },
-      }).catch(() => null);
+      await db.trailLocation
+        .create({
+          data: {
+            trailId: newTrail.id,
+            region: trail.region || 'Unknown',
+            country: trail.country || 'Unknown',
+            distanceFromCityKm: trail.distanceFromCityKm
+              ? parseFloat(trail.distanceFromCityKm.toString())
+              : null,
+            startPoint: trail.startingPoint,
+            latitude: trail.latitude,
+            longitude: trail.longitude,
+          },
+        })
+        .catch(() => null);
     }
 
     // Add transportation
     if (trail.transportation) {
-      await db.trailTransportation.create({
-        data: {
-          trailId: newTrail.id,
-          privateOption: trail.transportation.privateOption,
-          publicOption: trail.transportation.publicOption,
-          returnOption: trail.transportation.returnOption,
-        },
-      }).catch(() => null);
+      await db.trailTransportation
+        .create({
+          data: {
+            trailId: newTrail.id,
+            privateOption: trail.transportation.privateOption,
+            publicOption: trail.transportation.publicOption,
+            returnOption: trail.transportation.returnOption,
+          },
+        })
+        .catch(() => null);
     }
 
     // Add highlights
     if (trail.highlights && Array.isArray(trail.highlights)) {
       for (let i = 0; i < trail.highlights.length; i++) {
-        await db.trailHighlight.create({
-          data: {
-            trailId: newTrail.id,
-            text: trail.highlights[i],
-            sortOrder: i,
-          },
-        }).catch(() => null);
+        await db.trailHighlight
+          .create({
+            data: {
+              trailId: newTrail.id,
+              text: trail.highlights[i],
+              sortOrder: i,
+            },
+          })
+          .catch(() => null);
       }
     }
 
     // Add cost items (inclusions)
     if (trail.costIncludes && Array.isArray(trail.costIncludes)) {
       for (let i = 0; i < trail.costIncludes.length; i++) {
-        await db.trailCostItem.create({
-          data: {
-            trailId: newTrail.id,
-            type: 'included',
-            text: trail.costIncludes[i],
-            sortOrder: i,
-          },
-        }).catch(() => null);
+        await db.trailCostItem
+          .create({
+            data: {
+              trailId: newTrail.id,
+              type: 'included',
+              text: trail.costIncludes[i],
+              sortOrder: i,
+            },
+          })
+          .catch(() => null);
       }
     }
 
     // Add cost items (exclusions)
     if (trail.costExcludes && Array.isArray(trail.costExcludes)) {
       for (let i = 0; i < trail.costExcludes.length; i++) {
-        await db.trailCostItem.create({
-          data: {
-            trailId: newTrail.id,
-            type: 'excluded',
-            text: trail.costExcludes[i],
-            sortOrder: i,
-          },
-        }).catch(() => null);
+        await db.trailCostItem
+          .create({
+            data: {
+              trailId: newTrail.id,
+              type: 'excluded',
+              text: trail.costExcludes[i],
+              sortOrder: i,
+            },
+          })
+          .catch(() => null);
       }
     }
 
@@ -467,37 +584,51 @@ export class SyncService {
               phaseNumber: phaseIdx + 1,
               title: phaseData.title || `Day ${phaseIdx + 1}`,
               durationLabel: phaseData.durationLabel || null,
-              durationMinutes: phaseData.durationMinutes ? parseInt(phaseData.durationMinutes.toString()) : null,
-              altitudeM: phaseData.altitudeM ? parseInt(phaseData.altitudeM.toString()) : null,
+              durationMinutes: phaseData.durationMinutes
+                ? parseInt(phaseData.durationMinutes.toString())
+                : null,
+              altitudeM: phaseData.altitudeM
+                ? parseInt(phaseData.altitudeM.toString())
+                : null,
               sortOrder: phaseIdx,
             },
           });
 
           // Add phase details/description
           if (phaseData.details && Array.isArray(phaseData.details)) {
-            for (let detailIdx = 0; detailIdx < phaseData.details.length; detailIdx++) {
-              await db.itineraryPhaseDetail.create({
-                data: {
-                  phaseId: phase.id,
-                  detail: phaseData.details[detailIdx],
-                  sortOrder: detailIdx,
-                },
-              }).catch(() => null);
+            for (
+              let detailIdx = 0;
+              detailIdx < phaseData.details.length;
+              detailIdx++
+            ) {
+              await db.itineraryPhaseDetail
+                .create({
+                  data: {
+                    phaseId: phase.id,
+                    detail: phaseData.details[detailIdx],
+                    sortOrder: detailIdx,
+                  },
+                })
+                .catch(() => null);
             }
           }
 
           // Also support single description field
           if (phaseData.description) {
-            await db.itineraryPhaseDetail.create({
-              data: {
-                phaseId: phase.id,
-                detail: phaseData.description,
-                sortOrder: 0,
-              },
-            }).catch(() => null);
+            await db.itineraryPhaseDetail
+              .create({
+                data: {
+                  phaseId: phase.id,
+                  detail: phaseData.description,
+                  sortOrder: 0,
+                },
+              })
+              .catch(() => null);
           }
         } catch (err) {
-          this.logger.warn(`Failed to create itinerary phase ${phaseIdx + 1}: ${err}`);
+          this.logger.warn(
+            `Failed to create itinerary phase ${phaseIdx + 1}: ${err}`,
+          );
         }
       }
     }
@@ -606,18 +737,22 @@ export class SyncService {
     if (!sessionId) return waypointMappings;
 
     // Get trail from first session
-    const session = await db.hikeSession.findUnique({ where: { id: sessionId } });
+    const session = await db.hikeSession.findUnique({
+      where: { id: sessionId },
+    });
     if (!session) return waypointMappings;
 
     for (const wp of waypoints) {
       // Handle both distanceFromStart and distanceAlong field names
       const distance = wp.distanceFromStart ?? wp.distanceAlong;
-      
+
       // Older clients identify the waypoint on the media manifest rather than
       // carrying a second photo UUID list on each waypoint.
-      const photoClientUuids = wp.photoClientUuids ?? Array.from(mediaMapping.entries())
-        .filter(([, media]) => media.waypointClientUuid === wp.clientUuid)
-        .map(([uuid]) => uuid);
+      const photoClientUuids =
+        wp.photoClientUuids ??
+        Array.from(mediaMapping.entries())
+          .filter(([, media]) => media.waypointClientUuid === wp.clientUuid)
+          .map(([uuid]) => uuid);
 
       // Collect image URLs for this waypoint
       const imageUrls: string[] = [];
@@ -671,7 +806,8 @@ export class SyncService {
           description: wp.description || null,
           latitude: wp.latitude,
           longitude: wp.longitude,
-          altitudeM: wp.elevation == null ? null : Math.round(Number(wp.elevation)),
+          altitudeM:
+            wp.elevation == null ? null : Math.round(Number(wp.elevation)),
           distanceKm: distance,
           type: wp.type || 'other',
           facilities: wp.facilities || [],
@@ -715,9 +851,15 @@ export class SyncService {
       committedServerVersion: tracker.serverVersion || 1,
       acknowledgedLocalRevision: requestData.localRevision,
       clientUuid: tracker.clientUuid,
-      sessionMappings: extra?.sessionMappings ? Object.fromEntries(extra.sessionMappings) : {},
-      waypointMappings: extra?.waypointMappings ? Object.fromEntries(extra.waypointMappings) : {},
-      mediaMappings: extra?.mediaMapping ? Object.fromEntries(extra.mediaMapping) : {},
+      sessionMappings: extra?.sessionMappings
+        ? Object.fromEntries(extra.sessionMappings)
+        : {},
+      waypointMappings: extra?.waypointMappings
+        ? Object.fromEntries(extra.waypointMappings)
+        : {},
+      mediaMappings: extra?.mediaMapping
+        ? Object.fromEntries(extra.mediaMapping)
+        : {},
       trackPointCount: extra?.trackPointCount || 0,
       waypointCount: requestData.waypoints.length,
       imageCount: requestData.media.length,

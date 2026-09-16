@@ -1,4 +1,9 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../common/upload.service';
 import { Readable } from 'stream';
@@ -53,12 +58,15 @@ export class TrailsService {
             breakdownType: 'count',
           },
         },
-        location: region || country ? {
-          create: {
-            region: region || '',
-            country: country || '',
-          },
-        } : undefined,
+        location:
+          region || country
+            ? {
+                create: {
+                  region: region || '',
+                  country: country || '',
+                },
+              }
+            : undefined,
       } as any,
       include: {
         location: true,
@@ -128,8 +136,16 @@ export class TrailsService {
         },
         highlights: true,
         pointsOfInterest: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] },
-        hikeWaypoints: { include: { photos: true }, orderBy: { timestamp: 'asc' } },
-        hikeSessions: { orderBy: { startTime: 'asc' }, include: { trackPoints: { orderBy: [{ timestamp: 'asc' }, { id: 'asc' }] } } },
+        hikeWaypoints: {
+          include: { photos: true },
+          orderBy: { timestamp: 'asc' },
+        },
+        hikeSessions: {
+          orderBy: { startTime: 'asc' },
+          include: {
+            trackPoints: { orderBy: [{ timestamp: 'asc' }, { id: 'asc' }] },
+          },
+        },
         costItems: true,
         recommendedSeasons: true,
         avoidedMonths: true,
@@ -152,22 +168,68 @@ export class TrailsService {
     const coverPhoto = trail.media.find((m: any) => m.type === 'cover');
 
     // Build GPX download URL if GPX file exists
-    const routeFileUrl = trail.routeFilePath || trail.hikeSessions.some((s) => s.trackPoints.length) ? `/api/trails/${id}/download-gpx` : null;
+    const routeFileUrl =
+      trail.routeFilePath ||
+      trail.hikeSessions.some((s) => s.trackPoints.length)
+        ? `/api/trails/${id}/download-gpx`
+        : null;
 
     const { hikeSessions, hikeWaypoints, ...detail } = trail;
-    const recordedPoints = hikeSessions.flatMap((session) => session.trackPoints);
-    const elevations = recordedPoints.filter((p) => p.elevation != null).map((p) => Number(p.elevation));
+    const recordedPoints = hikeSessions.flatMap(
+      (session) => session.trackPoints,
+    );
+    const elevations = recordedPoints
+      .filter((p) => p.elevation != null)
+      .map((p) => Number(p.elevation));
+    const poiKey = (name: unknown, latitude: unknown, longitude: unknown) =>
+      `${String(name ?? '')
+        .trim()
+        .toLowerCase()}|${Number(latitude).toFixed(6)}|${Number(longitude).toFixed(6)}`;
+    const projectedPoiKeys = new Set(
+      trail.pointsOfInterest.map((poi) =>
+        poiKey(poi.name, poi.latitude, poi.longitude),
+      ),
+    );
+    const recordedPois = hikeWaypoints
+      .filter(
+        (waypoint) =>
+          !projectedPoiKeys.has(
+            poiKey(
+              waypoint.name ?? 'Waypoint',
+              waypoint.latitude,
+              waypoint.longitude,
+            ),
+          ),
+      )
+      .map((wp) => ({
+        id: `recorded:${wp.id}`,
+        trailId: id,
+        name: wp.name ?? 'Waypoint',
+        description: wp.description,
+        latitude: wp.latitude,
+        longitude: wp.longitude,
+        altitudeM:
+          wp.elevation == null ? null : Math.round(Number(wp.elevation)),
+        distanceKm: wp.distanceFromStart,
+        icon: wp.type,
+        facilities: wp.facilities,
+        images: wp.photos.map((photo) => photo.photoUrl),
+      }));
     return {
       ...detail,
-      pointsOfInterest: trail.pointsOfInterest.length ? trail.pointsOfInterest : hikeWaypoints.map((wp) => ({
-        id: `recorded:${wp.id}`, trailId: id, name: wp.name ?? 'Waypoint',
-        description: wp.description, latitude: wp.latitude, longitude: wp.longitude,
-        altitudeM: wp.elevation == null ? null : Math.round(Number(wp.elevation)),
-        distanceKm: wp.distanceFromStart, icon: wp.type, facilities: wp.facilities,
-        images: wp.photos.map((photo) => photo.photoUrl),
-      })),
-      maxAltitudeM: trail.maxAltitudeM ?? (elevations.length ? Math.round(elevations.reduce((a, b) => Math.max(a, b))) : null),
-      routeFileContent: recordedPoints.length ? Buffer.from(recordedGpx(trail.hikeName, hikeSessions)).toString('base64') : null,
+      // A projected POI and a recorded waypoint can coexist. Do not hide
+      // recorded intersections merely because one edited POI already exists.
+      pointsOfInterest: [...trail.pointsOfInterest, ...recordedPois],
+      maxAltitudeM:
+        trail.maxAltitudeM ??
+        (elevations.length
+          ? Math.round(elevations.reduce((a, b) => Math.max(a, b)))
+          : null),
+      routeFileContent: recordedPoints.length
+        ? Buffer.from(recordedGpx(trail.hikeName, hikeSessions)).toString(
+            'base64',
+          )
+        : null,
       coverPhoto,
       routeFileUrl, // Add download URL for frontend to use
     };
@@ -193,12 +255,26 @@ export class TrailsService {
 
     await this.prisma.$transaction(async (tx) => {
       // Extract nested objects
-      const { location, transportation, highlights, itineraryPhases, pointsOfInterest, costItems, recommendedSeasons, avoidedMonths, safetyItems, ...trailData } = updateTrailDto;
+      const {
+        location,
+        transportation,
+        highlights,
+        itineraryPhases,
+        pointsOfInterest,
+        costItems,
+        recommendedSeasons,
+        avoidedMonths,
+        safetyItems,
+        ...trailData
+      } = updateTrailDto;
 
       // Update trail basic info
       // Cast routeFileType to enum if provided
       const dataToUpdate: any = { ...trailData };
-      if (dataToUpdate.routeFileType && typeof dataToUpdate.routeFileType === 'string') {
+      if (
+        dataToUpdate.routeFileType &&
+        typeof dataToUpdate.routeFileType === 'string'
+      ) {
         dataToUpdate.routeFileType = dataToUpdate.routeFileType as any;
       }
 
@@ -247,7 +323,11 @@ export class TrailsService {
             data: {
               trailId: id,
               text: highlight.text,
-              sortOrder: uniqueSortOrder(highlight.sortOrder, index, usedHighlightOrder),
+              sortOrder: uniqueSortOrder(
+                highlight.sortOrder,
+                index,
+                usedHighlightOrder,
+              ),
             },
           });
         }
@@ -271,7 +351,11 @@ export class TrailsService {
               durationLabel: phase.durationLabel || null,
               durationMinutes: phase.durationMinutes ?? null,
               altitudeM: phase.altitudeM ?? null,
-              sortOrder: uniqueSortOrder(phase.sortOrder, index, usedPhaseOrder),
+              sortOrder: uniqueSortOrder(
+                phase.sortOrder,
+                index,
+                usedPhaseOrder,
+              ),
             },
           });
 
@@ -283,7 +367,11 @@ export class TrailsService {
                 data: {
                   phaseId: newPhase.id,
                   detail: detail.detail,
-                  sortOrder: uniqueSortOrder(detail.sortOrder, detailIndex, usedDetailOrder),
+                  sortOrder: uniqueSortOrder(
+                    detail.sortOrder,
+                    detailIndex,
+                    usedDetailOrder,
+                  ),
                 },
               });
             }
@@ -299,17 +387,34 @@ export class TrailsService {
           const data = {
             ...fields,
             ...(latitude !== undefined ? { latitude: Number(latitude) } : {}),
-            ...(longitude !== undefined ? { longitude: Number(longitude) } : {}),
-            ...(distanceKm !== undefined ? { distanceKm: Number(distanceKm) } : {}),
+            ...(longitude !== undefined
+              ? { longitude: Number(longitude) }
+              : {}),
+            ...(distanceKm !== undefined
+              ? { distanceKm: Number(distanceKm) }
+              : {}),
           };
           if (poiId?.startsWith('recorded:')) {
-            const waypoint = await tx.hikeWaypoint.findFirst({ where: { id: BigInt(poiId.substring(9)), trailId: id } });
-            if (!waypoint) throw new BadRequestException('Recorded POI does not belong to this trail');
+            const waypoint = await tx.hikeWaypoint.findFirst({
+              where: { id: BigInt(poiId.substring(9)), trailId: id },
+            });
+            if (!waypoint)
+              throw new BadRequestException(
+                'Recorded POI does not belong to this trail',
+              );
             await tx.pointOfInterest.create({ data: { ...data, trailId: id } });
           } else if (poiId) {
-            const existing = await tx.pointOfInterest.findFirst({ where: { id: BigInt(poiId), trailId: id } });
-            if (!existing) throw new BadRequestException('POI does not belong to this trail');
-            await tx.pointOfInterest.update({ where: { id: existing.id }, data });
+            const existing = await tx.pointOfInterest.findFirst({
+              where: { id: BigInt(poiId), trailId: id },
+            });
+            if (!existing)
+              throw new BadRequestException(
+                'POI does not belong to this trail',
+              );
+            await tx.pointOfInterest.update({
+              where: { id: existing.id },
+              data,
+            });
           } else {
             await tx.pointOfInterest.create({ data: { ...data, trailId: id } });
           }
@@ -353,7 +458,11 @@ export class TrailsService {
             data: {
               trailId: id,
               season: season.season,
-              sortOrder: uniqueSortOrder(season.sortOrder, index, usedSeasonOrder),
+              sortOrder: uniqueSortOrder(
+                season.sortOrder,
+                index,
+                usedSeasonOrder,
+              ),
             },
           });
         }
@@ -375,7 +484,11 @@ export class TrailsService {
               monthLabel: month.monthLabel,
               monthNumber: month.monthNumber,
               reason: month.reason,
-              sortOrder: uniqueSortOrder(month.sortOrder, index, usedMonthOrder),
+              sortOrder: uniqueSortOrder(
+                month.sortOrder,
+                index,
+                usedMonthOrder,
+              ),
             },
           });
         }
@@ -403,7 +516,6 @@ export class TrailsService {
           });
         }
       }
-
     });
 
     // Return updated trail with all details
@@ -430,6 +542,7 @@ export class TrailsService {
     if (!trail) {
       throw new NotFoundException('Trail not found');
     }
+    this.validateForPublish(trail);
 
     return this.prisma.trail.update({
       where: { id },
@@ -448,6 +561,9 @@ export class TrailsService {
     }
 
     const newStatus = trail.status === 'active' ? 'draft' : 'active';
+    if (newStatus === 'active') {
+      this.validateForPublish(trail);
+    }
 
     return this.prisma.trail.update({
       where: { id },
@@ -458,6 +574,41 @@ export class TrailsService {
     });
   }
 
+  private validateForPublish(trail: any) {
+    const missing: string[] = [];
+    const hasText = (value: unknown) =>
+      typeof value === 'string' && value.trim().length > 0;
+    const positive = (value: unknown) =>
+      value != null && Number.isFinite(Number(value)) && Number(value) > 0;
+
+    if (!hasText(trail.hikeName)) missing.push('hike name');
+    if (!hasText(trail.description)) missing.push('description');
+    if (!hasText(trail.location?.region)) missing.push('region');
+    if (!hasText(trail.location?.country)) missing.push('country');
+    if (!positive(trail.durationDays)) missing.push('duration');
+    if (!positive(trail.distanceMinKm)) missing.push('minimum distance');
+    if (!positive(trail.distanceMaxKm)) missing.push('maximum distance');
+    if (!positive(trail.walkingTimeMinMinutes))
+      missing.push('minimum walking time');
+    if (!positive(trail.walkingTimeMaxMinutes))
+      missing.push('maximum walking time');
+    if (!positive(trail.maxAltitudeM)) missing.push('maximum altitude');
+    if (!hasText(trail.difficulty)) missing.push('difficulty');
+    if (!hasText(trail.activity)) missing.push('activity');
+    if (!trail.itineraryPhases?.length) missing.push('itinerary');
+    if (!trail.highlights?.length) missing.push('highlight');
+    if (!trail.pointsOfInterest?.length) missing.push('point of interest');
+    if (!hasText(trail.routeFilePath) && !hasText(trail.routeFileContent)) {
+      missing.push('GPX route');
+    }
+
+    if (missing.length) {
+      throw new BadRequestException(
+        `Complete required fields before publishing: ${missing.join(', ')}`,
+      );
+    }
+  }
+
   // Individual add methods for step-by-step trail creation
   async addItineraryPhase(id: bigint, phaseData: any) {
     await this.findById(id);
@@ -465,12 +616,14 @@ export class TrailsService {
       data: {
         ...phaseData,
         trailId: id,
-        details: phaseData.details ? {
-          create: phaseData.details.map((detail: any) => ({
-            detail: detail.detail,
-            sortOrder: detail.sortOrder || 0,
-          })),
-        } : undefined,
+        details: phaseData.details
+          ? {
+              create: phaseData.details.map((detail: any) => ({
+                detail: detail.detail,
+                sortOrder: detail.sortOrder || 0,
+              })),
+            }
+          : undefined,
       },
     });
   }
@@ -485,18 +638,28 @@ export class TrailsService {
     });
   }
 
-  async addPointOfInterest(id: bigint, data: any, files?: { images?: Express.Multer.File[] }) {
+  async addPointOfInterest(
+    id: bigint,
+    data: any,
+    files?: { images?: Express.Multer.File[] },
+  ) {
     await this.findById(id);
 
     // Handle empty or undefined data
-    if (!data || (Object.keys(data).length === 0 && (!files?.images || files.images.length === 0))) {
+    if (
+      !data ||
+      (Object.keys(data).length === 0 &&
+        (!files?.images || files.images.length === 0))
+    ) {
       throw new Error('POI name is required');
     }
 
     // Process uploaded images
     let imageUrls: string[] = [];
     if (files?.images && files.images.length > 0) {
-      imageUrls = files.images.map((file) => this.uploadService.uploadFile(file, 'images'));
+      imageUrls = files.images.map((file) =>
+        this.uploadService.uploadFile(file, 'images'),
+      );
     }
 
     // Merge with provided image URLs if any
@@ -514,7 +677,10 @@ export class TrailsService {
         altitudeM: data?.altitudeM ? parseInt(data.altitudeM) : undefined,
         latitude: data?.latitude ? parseFloat(data.latitude) : undefined,
         longitude: data?.longitude ? parseFloat(data.longitude) : undefined,
-        facilities: data?.facilities && Array.isArray(data.facilities) ? data.facilities : [],
+        facilities:
+          data?.facilities && Array.isArray(data.facilities)
+            ? data.facilities
+            : [],
         images: allImages.length > 0 ? allImages : [],
         sortOrder: data?.sortOrder ? parseInt(data.sortOrder) : 0,
         trailId: id,
@@ -566,9 +732,10 @@ export class TrailsService {
     const trail = await this.findById(id);
 
     // Check if transportation already exists
-    const existingTransportation = await this.prisma.trailTransportation.findUnique({
-      where: { trailId: id },
-    });
+    const existingTransportation =
+      await this.prisma.trailTransportation.findUnique({
+        where: { trailId: id },
+      });
 
     if (existingTransportation) {
       // Update existing transportation
@@ -593,13 +760,25 @@ export class TrailsService {
     });
   }
 
-  async uploadPoiImages(id: bigint, files?: { images?: Express.Multer.File[] }) {
+  async uploadPoiImages(
+    id: bigint,
+    files?: { images?: Express.Multer.File[] },
+  ) {
     await this.findById(id);
-    if (!files?.images?.length) throw new BadRequestException('Images are required');
-    return { urls: files.images.map((file) => this.uploadService.uploadFile(file, 'hike-photos')) };
+    if (!files?.images?.length)
+      throw new BadRequestException('Images are required');
+    return {
+      urls: files.images.map((file) =>
+        this.uploadService.uploadFile(file, 'hike-photos'),
+      ),
+    };
   }
 
-  async addMedia(id: bigint, data: any, files?: { images?: Express.Multer.File[] }) {
+  async addMedia(
+    id: bigint,
+    data: any,
+    files?: { images?: Express.Multer.File[] },
+  ) {
     await this.findById(id);
 
     // If files provided, create one media entry per file
@@ -648,36 +827,41 @@ export class TrailsService {
 
     return {
       gpxFilePath,
-      message: 'GPX file uploaded successfully. Use this path in trail creation.',
+      message:
+        'GPX file uploaded successfully. Use this path in trail creation.',
     };
   }
 
-  async uploadCoverPhoto(id: bigint, files?: { coverPhoto?: Express.Multer.File[] }) {
+  async uploadCoverPhoto(
+    id: bigint,
+    files?: { coverPhoto?: Express.Multer.File[] },
+  ) {
     const trail = await this.findById(id);
 
     if (!files?.coverPhoto || files.coverPhoto.length === 0) {
-      throw new BadRequestException('Cover photo is required. Please upload a photo.');
+      throw new BadRequestException(
+        'Cover photo is required. Please upload a photo.',
+      );
     }
 
     const coverPhotoFile = files.coverPhoto[0];
-    
+
     // Upload using dedicated method
     const coverPhotoUrl = this.uploadService.uploadCoverPhoto(coverPhotoFile);
 
     // Create media entry as cover photo
     const media = await this.prisma.$transaction(async (tx) => {
       await tx.trailMedia.deleteMany({ where: { trailId: id, type: 'cover' } });
-    return tx.trailMedia.create({
-      data: {
-        trailId: id,
-        type: 'cover',
-        url: coverPhotoUrl,
-        altText: `${trail.hikeName} cover photo`,
-        sortOrder: 0,
-        isActive: true,
-      },
-    });
-
+      return tx.trailMedia.create({
+        data: {
+          trailId: id,
+          type: 'cover',
+          url: coverPhotoUrl,
+          altText: `${trail.hikeName} cover photo`,
+          sortOrder: 0,
+          isActive: true,
+        },
+      });
     });
 
     return {
@@ -687,7 +871,10 @@ export class TrailsService {
     };
   }
 
-  async uploadGpxRoute(id: bigint, files?: { gpxFile?: Express.Multer.File[] }) {
+  async uploadGpxRoute(
+    id: bigint,
+    files?: { gpxFile?: Express.Multer.File[] },
+  ) {
     await this.findById(id);
 
     if (!files?.gpxFile || files.gpxFile.length === 0) {
@@ -709,11 +896,22 @@ export class TrailsService {
   async downloadGpx(id: bigint) {
     const trail = await this.prisma.trail.findUnique({
       where: { id },
-      include: { hikeSessions: { orderBy: { startTime: 'asc' }, include: { trackPoints: { orderBy: [{ timestamp: 'asc' }, { id: 'asc' }] } } } },
+      include: {
+        hikeSessions: {
+          orderBy: { startTime: 'asc' },
+          include: {
+            trackPoints: { orderBy: [{ timestamp: 'asc' }, { id: 'asc' }] },
+          },
+        },
+      },
     });
     if (!trail) throw new NotFoundException('Trail not found');
     const filePath = trail.routeFilePath && `.${trail.routeFilePath}`;
-    if (filePath && trail.routeFilePath?.startsWith('/uploads/') && existsSync(filePath)) {
+    if (
+      filePath &&
+      trail.routeFilePath?.startsWith('/uploads/') &&
+      existsSync(filePath)
+    ) {
       return this.uploadService.getFileStream(filePath);
     }
     if (trail.hikeSessions.some((s) => s.trackPoints.length)) {
