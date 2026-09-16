@@ -123,6 +123,15 @@ export class SyncService {
         // Create actual trail entry with synced hike details
         const trailId = await this.createTrailFromSync(requestData.trail, db);
 
+        // Attach uploaded trail images so GET /trails/:id can return them.
+        for (const media of requestData.media as any[]) {
+          const uploaded = mediaMapping.get(media.clientUuid ?? media.clientMediaUuid);
+          const type = media.type ?? media.mediaType;
+          if (uploaded && ['cover', 'route', 'gallery'].includes(type)) {
+            await db.trailMedia.create({ data: { trailId, type, url: uploaded.url, altText: media.caption ?? null } });
+          }
+        }
+
         // Create sessions linked to the new trail
         const sessionMappings = await this.syncRecordingSessions(
           existingTracker,
@@ -259,7 +268,8 @@ export class SyncService {
       return mediaMapping;
     }
 
-    for (const media of mediaList) {
+    for (const original of mediaList) {
+      const media = { ...original, clientUuid: original.clientUuid ?? original.clientMediaUuid, type: original.type ?? original.mediaType };
       const file = imageFiles.get(media.clientUuid);
       if (!file) continue;
 
@@ -284,6 +294,7 @@ export class SyncService {
           clientUuid: media.clientUuid,
           serverMediaId: mapping.serverMediaId,
           url: uploadResult,
+          waypointClientUuid: media.waypointClientUuid,
         });
 
         this.logger.debug(`Uploaded media: ${media.clientUuid}`);
@@ -321,7 +332,7 @@ export class SyncService {
       if (typeof trail.duration === 'string') {
         durationLabel = trail.duration;
         // Try to parse duration string to extract days (e.g., "1", "1-2", "5-6 hours")
-        const match = trail.duration.match(/^(\d+)/);
+        const match = trail.duration.match(/^(\d+)\s*days?$/i);
         if (match) {
           durationDays = parseInt(match[1]);
         }
@@ -346,7 +357,7 @@ export class SyncService {
       distanceMaxKm: trail.distance ? parseFloat(trail.distance.toString()) : null,
       walkingTimeMinMinutes: trail.walkingTimeMin ? parseInt(trail.walkingTimeMin.toString()) : null,
       walkingTimeMaxMinutes: trail.walkingTimeMax ? parseInt(trail.walkingTimeMax.toString()) : null,
-      maxAltitudeM: trail.maxAltitude ? parseInt(trail.maxAltitude.toString()) : null,
+      maxAltitudeM: trail.maxAltitudeM != null || trail.maxAltitude != null ? Math.round(Number(trail.maxAltitudeM ?? trail.maxAltitude)) : null,
       durationDays: durationDays,
       durationLabel: durationLabel,
       routeFilePath: routeFilePath,
@@ -570,7 +581,7 @@ export class SyncService {
         sessionId,
         latitude: tp.latitude,
         longitude: tp.longitude,
-        elevation: tp.altitude || tp.elevation,
+        elevation: tp.altitude ?? tp.elevation,
         accuracy: tp.accuracy,
         heading: tp.heading,
         speed: tp.speed,
@@ -600,12 +611,18 @@ export class SyncService {
 
     for (const wp of waypoints) {
       // Handle both distanceFromStart and distanceAlong field names
-      const distance = wp.distanceFromStart || wp.distanceAlong;
+      const distance = wp.distanceFromStart ?? wp.distanceAlong;
       
+      // Older clients identify the waypoint on the media manifest rather than
+      // carrying a second photo UUID list on each waypoint.
+      const photoClientUuids = wp.photoClientUuids ?? Array.from(mediaMapping.entries())
+        .filter(([, media]) => media.waypointClientUuid === wp.clientUuid)
+        .map(([uuid]) => uuid);
+
       // Collect image URLs for this waypoint
       const imageUrls: string[] = [];
-      if (wp.photoClientUuids && Array.isArray(wp.photoClientUuids)) {
-        for (const photoUuid of wp.photoClientUuids) {
+      if (Array.isArray(photoClientUuids)) {
+        for (const photoUuid of photoClientUuids) {
           const photoInfo = mediaMapping.get(photoUuid);
           if (photoInfo?.url) {
             imageUrls.push(photoInfo.url);
@@ -654,20 +671,17 @@ export class SyncService {
           description: wp.description || null,
           latitude: wp.latitude,
           longitude: wp.longitude,
-          altitudeM: wp.elevation,
+          altitudeM: wp.elevation == null ? null : Math.round(Number(wp.elevation)),
           distanceKm: distance,
           type: wp.type || 'other',
           facilities: wp.facilities || [],
           images: imageUrls, // Store image URLs in POI
         },
-      }).catch((err) => {
-        this.logger.warn(`Failed to create POI: ${err.message}`);
-        // Don't throw - continue if POI creation fails
       });
 
       // Link photos to waypoint
-      if (wp.photoClientUuids && Array.isArray(wp.photoClientUuids)) {
-        for (const photoUuid of wp.photoClientUuids) {
+      if (Array.isArray(photoClientUuids)) {
+        for (const photoUuid of photoClientUuids) {
           const photoInfo = mediaMapping.get(photoUuid);
           if (photoInfo) {
             await db.hikeWaypointPhoto.create({

@@ -1,8 +1,25 @@
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UploadService } from '../common/upload.service';
+import { Readable } from 'stream';
+import { existsSync } from 'fs';
+import { recordedGpx } from './recorded-gpx';
 import { CreateTrailDto } from './dto/create-trail.dto';
 import { UpdateTrailDto } from './dto/update-trail.dto';
+
+function uniqueSortOrder(
+  requested: number | undefined,
+  index: number,
+  used: Set<number>,
+) {
+  let value = Number.isInteger(requested) ? requested! : index;
+  if (used.has(value)) {
+    value = index;
+    while (used.has(value)) value += 1;
+  }
+  used.add(value);
+  return value;
+}
 
 @Injectable()
 export class TrailsService {
@@ -104,12 +121,15 @@ export class TrailsService {
           },
         },
         itineraryPhases: {
+          orderBy: [{ sortOrder: 'asc' }, { phaseNumber: 'asc' }],
           include: {
-            details: true,
+            details: { orderBy: { sortOrder: 'asc' } },
           },
         },
         highlights: true,
-        pointsOfInterest: true,
+        pointsOfInterest: { orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] },
+        hikeWaypoints: { include: { photos: true }, orderBy: { timestamp: 'asc' } },
+        hikeSessions: { orderBy: { startTime: 'asc' }, include: { trackPoints: { orderBy: [{ timestamp: 'asc' }, { id: 'asc' }] } } },
         costItems: true,
         recommendedSeasons: true,
         avoidedMonths: true,
@@ -132,10 +152,22 @@ export class TrailsService {
     const coverPhoto = trail.media.find((m: any) => m.type === 'cover');
 
     // Build GPX download URL if GPX file exists
-    const routeFileUrl = trail.routeFilePath ? `/api/trails/${id}/download-gpx` : null;
+    const routeFileUrl = trail.routeFilePath || trail.hikeSessions.some((s) => s.trackPoints.length) ? `/api/trails/${id}/download-gpx` : null;
 
+    const { hikeSessions, hikeWaypoints, ...detail } = trail;
+    const recordedPoints = hikeSessions.flatMap((session) => session.trackPoints);
+    const elevations = recordedPoints.filter((p) => p.elevation != null).map((p) => Number(p.elevation));
     return {
-      ...trail,
+      ...detail,
+      pointsOfInterest: trail.pointsOfInterest.length ? trail.pointsOfInterest : hikeWaypoints.map((wp) => ({
+        id: `recorded:${wp.id}`, trailId: id, name: wp.name ?? 'Waypoint',
+        description: wp.description, latitude: wp.latitude, longitude: wp.longitude,
+        altitudeM: wp.elevation == null ? null : Math.round(Number(wp.elevation)),
+        distanceKm: wp.distanceFromStart, icon: wp.type, facilities: wp.facilities,
+        images: wp.photos.map((photo) => photo.photoUrl),
+      })),
+      maxAltitudeM: trail.maxAltitudeM ?? (elevations.length ? Math.round(elevations.reduce((a, b) => Math.max(a, b))) : null),
+      routeFileContent: recordedPoints.length ? Buffer.from(recordedGpx(trail.hikeName, hikeSessions)).toString('base64') : null,
       coverPhoto,
       routeFileUrl, // Add download URL for frontend to use
     };
@@ -159,208 +191,220 @@ export class TrailsService {
       }
     }
 
-    // Extract nested objects
-    const { location, transportation, highlights, itineraryPhases, pointsOfInterest, costItems, recommendedSeasons, avoidedMonths, safetyItems, ...trailData } = updateTrailDto;
+    await this.prisma.$transaction(async (tx) => {
+      // Extract nested objects
+      const { location, transportation, highlights, itineraryPhases, pointsOfInterest, costItems, recommendedSeasons, avoidedMonths, safetyItems, ...trailData } = updateTrailDto;
 
-    // Update trail basic info
-    // Cast routeFileType to enum if provided
-    const dataToUpdate: any = { ...trailData };
-    if (dataToUpdate.routeFileType && typeof dataToUpdate.routeFileType === 'string') {
-      dataToUpdate.routeFileType = dataToUpdate.routeFileType as any;
-    }
+      // Update trail basic info
+      // Cast routeFileType to enum if provided
+      const dataToUpdate: any = { ...trailData };
+      if (dataToUpdate.routeFileType && typeof dataToUpdate.routeFileType === 'string') {
+        dataToUpdate.routeFileType = dataToUpdate.routeFileType as any;
+      }
 
-    const updatedTrail = await this.prisma.trail.update({
-      where: { id },
-      data: dataToUpdate,
-    });
-
-    // Update location if provided
-    if (location) {
-      const { ...locationData } = location;
-      await this.prisma.trailLocation.upsert({
-        where: { trailId: id },
-        update: locationData,
-        create: {
-          trailId: id,
-          region: locationData.region || '',
-          country: locationData.country || '',
-        },
-      });
-    }
-
-    // Update transportation if provided
-    if (transportation) {
-      await this.prisma.trailTransportation.upsert({
-        where: { trailId: id },
-        update: transportation,
-        create: {
-          trailId: id,
-          ...transportation,
-        },
-      });
-    }
-
-    // Update highlights if provided
-    if (highlights && Array.isArray(highlights)) {
-      // Delete existing highlights
-      await this.prisma.trailHighlight.deleteMany({
-        where: { trailId: id },
+      await tx.trail.update({
+        where: { id },
+        data: dataToUpdate,
       });
 
-      // Create new highlights
-      for (const highlight of highlights) {
-        await this.prisma.trailHighlight.create({
-          data: {
+      // Update location if provided
+      if (location) {
+        const { ...locationData } = location;
+        await tx.trailLocation.upsert({
+          where: { trailId: id },
+          update: locationData,
+          create: {
             trailId: id,
-            text: highlight.text,
-            sortOrder: highlight.sortOrder || 0,
+            region: locationData.region || '',
+            country: locationData.country || '',
           },
         });
       }
-    }
 
-    // Update itinerary phases if provided
-    if (itineraryPhases && Array.isArray(itineraryPhases)) {
-      // Delete existing phases and their details
-      await this.prisma.itineraryPhase.deleteMany({
-        where: { trailId: id },
-      });
-
-      // Create new phases with details
-      for (const phase of itineraryPhases) {
-        const newPhase = await this.prisma.itineraryPhase.create({
-          data: {
+      // Update transportation if provided
+      if (transportation) {
+        await tx.trailTransportation.upsert({
+          where: { trailId: id },
+          update: transportation,
+          create: {
             trailId: id,
-            phaseNumber: phase.phaseNumber,
-            title: phase.title,
-            durationLabel: phase.durationLabel || null,
-            durationMinutes: phase.durationMinutes || null,
-            altitudeM: phase.altitudeM || null,
-            sortOrder: phase.sortOrder || 0,
+            ...transportation,
           },
         });
+      }
 
-        // Add phase details
-        if (phase.details && Array.isArray(phase.details)) {
-          for (const detail of phase.details) {
-            await this.prisma.itineraryPhaseDetail.create({
-              data: {
-                phaseId: newPhase.id,
-                detail: detail.detail,
-                sortOrder: detail.sortOrder || 0,
-              },
-            });
+      // Update highlights if provided
+      if (highlights && Array.isArray(highlights)) {
+        // Delete existing highlights
+        await tx.trailHighlight.deleteMany({
+          where: { trailId: id },
+        });
+
+        // Create new highlights
+        const usedHighlightOrder = new Set<number>();
+        for (const [index, highlight] of highlights.entries()) {
+          await tx.trailHighlight.create({
+            data: {
+              trailId: id,
+              text: highlight.text,
+              sortOrder: uniqueSortOrder(highlight.sortOrder, index, usedHighlightOrder),
+            },
+          });
+        }
+      }
+
+      // Update itinerary phases if provided
+      if (itineraryPhases && Array.isArray(itineraryPhases)) {
+        // Delete existing phases and their details
+        await tx.itineraryPhase.deleteMany({
+          where: { trailId: id },
+        });
+
+        // Create new phases with details
+        const usedPhaseOrder = new Set<number>();
+        for (const [index, phase] of itineraryPhases.entries()) {
+          const newPhase = await tx.itineraryPhase.create({
+            data: {
+              trailId: id,
+              phaseNumber: phase.phaseNumber,
+              title: phase.title,
+              durationLabel: phase.durationLabel || null,
+              durationMinutes: phase.durationMinutes ?? null,
+              altitudeM: phase.altitudeM ?? null,
+              sortOrder: uniqueSortOrder(phase.sortOrder, index, usedPhaseOrder),
+            },
+          });
+
+          // Add phase details
+          if (phase.details && Array.isArray(phase.details)) {
+            const usedDetailOrder = new Set<number>();
+            for (const [detailIndex, detail] of phase.details.entries()) {
+              await tx.itineraryPhaseDetail.create({
+                data: {
+                  phaseId: newPhase.id,
+                  detail: detail.detail,
+                  sortOrder: uniqueSortOrder(detail.sortOrder, detailIndex, usedDetailOrder),
+                },
+              });
+            }
           }
         }
       }
-    }
 
-    // Update points of interest if provided
-    if (pointsOfInterest && Array.isArray(pointsOfInterest)) {
-      // Delete existing POIs
-      await this.prisma.pointOfInterest.deleteMany({
-        where: { trailId: id },
-      });
-
-      // Create new POIs
-      for (const poi of pointsOfInterest) {
-        await this.prisma.pointOfInterest.create({
-          data: {
-            trailId: id,
-            name: poi.name,
-            description: poi.description,
-            latitude: poi.latitude ? parseFloat(poi.latitude) : null,
-            longitude: poi.longitude ? parseFloat(poi.longitude) : null,
-            distanceKm: poi.distanceKm ? parseFloat(poi.distanceKm) : null,
-            icon: poi.icon,
-            altitudeM: poi.altitudeM,
-            facilities: poi.facilities || [],
-            images: poi.images || [],
-            sortOrder: poi.sortOrder || 0,
-          },
-        });
+      // Upsert by server identity; editing a POI must not discard its photos
+      // or recreate all other recorded POIs. Removal is a separate operation.
+      if (pointsOfInterest) {
+        for (const poi of pointsOfInterest) {
+          const { id: poiId, latitude, longitude, distanceKm, ...fields } = poi;
+          const data = {
+            ...fields,
+            ...(latitude !== undefined ? { latitude: Number(latitude) } : {}),
+            ...(longitude !== undefined ? { longitude: Number(longitude) } : {}),
+            ...(distanceKm !== undefined ? { distanceKm: Number(distanceKm) } : {}),
+          };
+          if (poiId?.startsWith('recorded:')) {
+            const waypoint = await tx.hikeWaypoint.findFirst({ where: { id: BigInt(poiId.substring(9)), trailId: id } });
+            if (!waypoint) throw new BadRequestException('Recorded POI does not belong to this trail');
+            await tx.pointOfInterest.create({ data: { ...data, trailId: id } });
+          } else if (poiId) {
+            const existing = await tx.pointOfInterest.findFirst({ where: { id: BigInt(poiId), trailId: id } });
+            if (!existing) throw new BadRequestException('POI does not belong to this trail');
+            await tx.pointOfInterest.update({ where: { id: existing.id }, data });
+          } else {
+            await tx.pointOfInterest.create({ data: { ...data, trailId: id } });
+          }
+        }
       }
-    }
 
-    // Update cost items if provided
-    if (costItems && Array.isArray(costItems)) {
-      // Delete existing cost items
-      await this.prisma.trailCostItem.deleteMany({
-        where: { trailId: id },
-      });
-
-      // Create new cost items
-      for (const item of costItems) {
-        await this.prisma.trailCostItem.create({
-          data: {
-            trailId: id,
-            type: item.type as any,
-            text: item.text,
-            sortOrder: item.sortOrder || 0,
-          },
+      // Update cost items if provided
+      if (costItems && Array.isArray(costItems)) {
+        // Delete existing cost items
+        await tx.trailCostItem.deleteMany({
+          where: { trailId: id },
         });
+
+        // Create new cost items
+        const usedCostOrder = new Map<string, Set<number>>();
+        for (const [index, item] of costItems.entries()) {
+          const used = usedCostOrder.get(item.type) ?? new Set<number>();
+          usedCostOrder.set(item.type, used);
+          await tx.trailCostItem.create({
+            data: {
+              trailId: id,
+              type: item.type as any,
+              text: item.text,
+              sortOrder: uniqueSortOrder(item.sortOrder, index, used),
+            },
+          });
+        }
       }
-    }
 
-    // Update recommended seasons if provided
-    if (recommendedSeasons && Array.isArray(recommendedSeasons)) {
-      // Delete existing seasons
-      await this.prisma.trailRecommendedSeason.deleteMany({
-        where: { trailId: id },
-      });
-
-      // Create new seasons
-      for (const season of recommendedSeasons) {
-        await this.prisma.trailRecommendedSeason.create({
-          data: {
-            trailId: id,
-            season: season.season,
-            sortOrder: season.sortOrder || 0,
-          },
+      // Update recommended seasons if provided
+      if (recommendedSeasons && Array.isArray(recommendedSeasons)) {
+        // Delete existing seasons
+        await tx.trailRecommendedSeason.deleteMany({
+          where: { trailId: id },
         });
+
+        // Create new seasons
+        const usedSeasonOrder = new Set<number>();
+        for (const [index, season] of recommendedSeasons.entries()) {
+          await tx.trailRecommendedSeason.create({
+            data: {
+              trailId: id,
+              season: season.season,
+              sortOrder: uniqueSortOrder(season.sortOrder, index, usedSeasonOrder),
+            },
+          });
+        }
       }
-    }
 
-    // Update avoided months if provided
-    if (avoidedMonths && Array.isArray(avoidedMonths)) {
-      // Delete existing months
-      await this.prisma.trailAvoidedMonth.deleteMany({
-        where: { trailId: id },
-      });
-
-      // Create new months
-      for (const month of avoidedMonths) {
-        await this.prisma.trailAvoidedMonth.create({
-          data: {
-            trailId: id,
-            monthLabel: month.monthLabel,
-            monthNumber: month.monthNumber,
-            reason: month.reason,
-            sortOrder: month.sortOrder || 0,
-          },
+      // Update avoided months if provided
+      if (avoidedMonths && Array.isArray(avoidedMonths)) {
+        // Delete existing months
+        await tx.trailAvoidedMonth.deleteMany({
+          where: { trailId: id },
         });
+
+        // Create new months
+        const usedMonthOrder = new Set<number>();
+        for (const [index, month] of avoidedMonths.entries()) {
+          await tx.trailAvoidedMonth.create({
+            data: {
+              trailId: id,
+              monthLabel: month.monthLabel,
+              monthNumber: month.monthNumber,
+              reason: month.reason,
+              sortOrder: uniqueSortOrder(month.sortOrder, index, usedMonthOrder),
+            },
+          });
+        }
       }
-    }
 
-    // Update safety items if provided
-    if (safetyItems && Array.isArray(safetyItems)) {
-      // Delete existing safety items
-      await this.prisma.trailSafetyItem.deleteMany({
-        where: { trailId: id },
-      });
-
-      // Create new safety items
-      for (const item of safetyItems) {
-        await this.prisma.trailSafetyItem.create({
-          data: {
-            trailId: id,
-            type: item.type as any,
-            text: item.text,
-            sortOrder: item.sortOrder || 0,
-          },
+      // Update safety items if provided
+      if (safetyItems && Array.isArray(safetyItems)) {
+        // Delete existing safety items
+        await tx.trailSafetyItem.deleteMany({
+          where: { trailId: id },
         });
+
+        // Create new safety items
+        const usedSafetyOrder = new Map<string, Set<number>>();
+        for (const [index, item] of safetyItems.entries()) {
+          const used = usedSafetyOrder.get(item.type) ?? new Set<number>();
+          usedSafetyOrder.set(item.type, used);
+          await tx.trailSafetyItem.create({
+            data: {
+              trailId: id,
+              type: item.type as any,
+              text: item.text,
+              sortOrder: uniqueSortOrder(item.sortOrder, index, used),
+            },
+          });
+        }
       }
-    }
+
+    });
 
     // Return updated trail with all details
     return this.findById(id);
@@ -549,6 +593,12 @@ export class TrailsService {
     });
   }
 
+  async uploadPoiImages(id: bigint, files?: { images?: Express.Multer.File[] }) {
+    await this.findById(id);
+    if (!files?.images?.length) throw new BadRequestException('Images are required');
+    return { urls: files.images.map((file) => this.uploadService.uploadFile(file, 'hike-photos')) };
+  }
+
   async addMedia(id: bigint, data: any, files?: { images?: Express.Multer.File[] }) {
     await this.findById(id);
 
@@ -615,7 +665,9 @@ export class TrailsService {
     const coverPhotoUrl = this.uploadService.uploadCoverPhoto(coverPhotoFile);
 
     // Create media entry as cover photo
-    const media = await this.prisma.trailMedia.create({
+    const media = await this.prisma.$transaction(async (tx) => {
+      await tx.trailMedia.deleteMany({ where: { trailId: id, type: 'cover' } });
+    return tx.trailMedia.create({
       data: {
         trailId: id,
         type: 'cover',
@@ -624,6 +676,8 @@ export class TrailsService {
         sortOrder: 0,
         isActive: true,
       },
+    });
+
     });
 
     return {
@@ -655,21 +709,16 @@ export class TrailsService {
   async downloadGpx(id: bigint) {
     const trail = await this.prisma.trail.findUnique({
       where: { id },
+      include: { hikeSessions: { orderBy: { startTime: 'asc' }, include: { trackPoints: { orderBy: [{ timestamp: 'asc' }, { id: 'asc' }] } } } },
     });
-
-    if (!trail) {
-      throw new NotFoundException('Trail not found');
+    if (!trail) throw new NotFoundException('Trail not found');
+    const filePath = trail.routeFilePath && `.${trail.routeFilePath}`;
+    if (filePath && trail.routeFilePath?.startsWith('/uploads/') && existsSync(filePath)) {
+      return this.uploadService.getFileStream(filePath);
     }
-
-    if (!trail.routeFilePath) {
-      throw new NotFoundException('No GPX file available for this trail');
+    if (trail.hikeSessions.some((s) => s.trackPoints.length)) {
+      return Readable.from([recordedGpx(trail.hikeName, trail.hikeSessions)]);
     }
-
-    // routeFilePath is stored as /uploads/gpx/filename
-    // We need to convert it to the actual file path
-    const filePath = `.${trail.routeFilePath}`;
-
-    // Return file stream
-    return this.uploadService.getFileStream(filePath);
+    throw new NotFoundException('No GPX file available for this trail');
   }
 }

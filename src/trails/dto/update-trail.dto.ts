@@ -86,6 +86,10 @@ class HighlightDto {
 }
 
 class PointOfInterestDto {
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @ApiProperty({ example: 'Hattiban Resort' })
   @IsString()
   name: string;

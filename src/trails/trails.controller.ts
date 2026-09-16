@@ -236,6 +236,16 @@ export class TrailsController {
     return this.trailsService.addHighlight(BigInt(id), data);
   }
 
+  @Post(':id/poi-images')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileFieldsInterceptor([{ name: 'images', maxCount: 20 }], { limits: { fileSize: 10 * 1024 * 1024, files: 20 } }))
+  async uploadPoiImages(
+    @Param('id') id: string,
+    @UploadedFiles() files: { images?: Express.Multer.File[] },
+  ) {
+    return this.trailsService.uploadPoiImages(BigInt(id), files);
+  }
+
   @Post(':id/points-of-interest')
   @UseGuards(JwtAuthGuard)
   @UseInterceptors(FileFieldsInterceptor([
