@@ -330,13 +330,18 @@ export class SyncService {
     imageFiles: Map<string, Express.Multer.File> | undefined,
     db: any,
   ): Promise<
-    Map<string, { clientUuid: string; serverMediaId: string; url: string }>
+    Map<string, { clientUuid: string; serverMediaId: string; url: string; waypointClientUuid?: string }>
   > {
     const mediaMapping = new Map();
 
     if (!imageFiles || imageFiles.size === 0) {
+      this.logger.debug('No image files provided for media upload');
       return mediaMapping;
     }
+
+    this.logger.debug(`Processing ${mediaList.length} media items with ${imageFiles.size} files`);
+    const availableFiles = Array.from(imageFiles.entries()).map(([key, file]) => `${key} (originalname: ${file.originalname})`);
+    this.logger.debug(`Available files: ${availableFiles.join(', ')}`);
 
     for (const original of mediaList) {
       const media = {
@@ -344,8 +349,37 @@ export class SyncService {
         clientUuid: original.clientUuid ?? original.clientMediaUuid,
         type: original.type ?? original.mediaType,
       };
-      const file = imageFiles.get(media.clientUuid);
-      if (!file) continue;
+      
+      // Try to find file by:
+      // 1. Media UUID as key
+      // 2. Media UUID as originalname
+      // 3. First available file if media UUID is unknown (fallback for legacy clients)
+      let file = imageFiles.get(media.clientUuid);
+      
+      if (!file) {
+        // Try to find by checking if any file's originalname matches the UUID
+        for (const [, f] of imageFiles.entries()) {
+          if (f.originalname === media.clientUuid || f.originalname.includes(media.clientUuid)) {
+            file = f;
+            break;
+          }
+        }
+      }
+
+      if (!file && mediaList.length === 1 && imageFiles.size === 1) {
+        // If there's exactly one media and one file, assume they match (auto-pairing)
+        file = Array.from(imageFiles.values())[0];
+        this.logger.debug(
+          `Auto-paired single media with single file: ${media.clientUuid} -> ${file.originalname}`,
+        );
+      }
+
+      if (!file) {
+        this.logger.warn(
+          `No file found for media ${media.clientUuid}. Available files: ${Array.from(imageFiles.keys()).join(', ')}`,
+        );
+        continue;
+      }
 
       try {
         const uploadResult = await this.uploadService.uploadHikePhoto(file);
@@ -371,9 +405,11 @@ export class SyncService {
           waypointClientUuid: media.waypointClientUuid,
         });
 
-        this.logger.debug(`Uploaded media: ${media.clientUuid}`);
+        this.logger.debug(
+          `Uploaded media: ${media.clientUuid} from file ${file.originalname} (type: ${media.type}, waypointUuid: ${media.waypointClientUuid || 'none'})`,
+        );
       } catch (error) {
-        this.logger.warn(
+        this.logger.error(
           `Failed to upload media ${media.clientUuid}: ${error.message}`,
         );
         throw new BadRequestException(
@@ -382,6 +418,7 @@ export class SyncService {
       }
     }
 
+    this.logger.debug(`Successfully mapped ${mediaMapping.size} media items`);
     return mediaMapping;
   }
 
@@ -742,26 +779,89 @@ export class SyncService {
     });
     if (!session) return waypointMappings;
 
+    // Build media lookup maps
+    const mediaByUuid = new Map<string, any>();
+    const mediaByUrl = new Map<string, any>();
+    
+    for (const [uuid, info] of mediaMapping.entries()) {
+      mediaByUuid.set(uuid, info);
+      if (info?.url) {
+        mediaByUrl.set(info.url, info);
+      }
+    }
+
+    this.logger.debug(`Media mapping contains ${mediaByUuid.size} items`);
+
+    // Track which media has been assigned
+    const assignedMediaUuids = new Set<string>();
+    const unassignedMediaUuids: string[] = [];
+
+    // Build unassigned list
+    for (const [uuid] of mediaByUuid.entries()) {
+      unassignedMediaUuids.push(uuid);
+    }
+
+    let mediaIndex = 0;
+
     for (const wp of waypoints) {
       // Handle both distanceFromStart and distanceAlong field names
       const distance = wp.distanceFromStart ?? wp.distanceAlong;
 
-      // Older clients identify the waypoint on the media manifest rather than
-      // carrying a second photo UUID list on each waypoint.
-      const photoClientUuids =
-        wp.photoClientUuids ??
-        Array.from(mediaMapping.entries())
-          .filter(([, media]) => media.waypointClientUuid === wp.clientUuid)
-          .map(([uuid]) => uuid);
-
-      // Collect image URLs for this waypoint
+      // Collect image URLs for this waypoint from all possible sources
       const imageUrls: string[] = [];
-      if (Array.isArray(photoClientUuids)) {
-        for (const photoUuid of photoClientUuids) {
-          const photoInfo = mediaMapping.get(photoUuid);
+      
+      this.logger.debug(`Processing waypoint ${wp.clientUuid} (name: ${wp.name})`);
+
+      // Method 1: Direct photoClientUuids list on waypoint (HIGHEST PRIORITY)
+      // Frontend explicitly lists which photos belong to this waypoint
+      if (wp.photoClientUuids && Array.isArray(wp.photoClientUuids) && wp.photoClientUuids.length > 0) {
+        this.logger.debug(`  Method 1: Found ${wp.photoClientUuids.length} photoClientUuids on waypoint`);
+        for (const photoUuid of wp.photoClientUuids) {
+          const photoInfo = mediaByUuid.get(photoUuid);
           if (photoInfo?.url) {
             imageUrls.push(photoInfo.url);
+            assignedMediaUuids.add(photoUuid);
+            this.logger.debug(`    Added photo: ${photoInfo.url}`);
+          } else {
+            this.logger.warn(`    Photo UUID not found in media mapping: ${photoUuid}`);
           }
+        }
+      }
+
+      // Method 2: Find media by waypointClientUuid link in mediaMapping
+      // Backend matches based on waypoint UUID in media manifest
+      if (imageUrls.length === 0) {
+        const waypointMediaByLink = Array.from(mediaByUuid.entries())
+          .filter(([uuid, media]) => media.waypointClientUuid === wp.clientUuid && !assignedMediaUuids.has(uuid));
+        
+        if (waypointMediaByLink.length > 0) {
+          this.logger.debug(`  Method 2: Found ${waypointMediaByLink.length} media by waypointClientUuid link`);
+          for (const [uuid, photoInfo] of waypointMediaByLink) {
+            if (photoInfo?.url) {
+              imageUrls.push(photoInfo.url);
+              assignedMediaUuids.add(uuid);
+              this.logger.debug(`    Added photo: ${photoInfo.url}`);
+            }
+          }
+        }
+      }
+
+      // Method 3: Sequential assignment from unassigned media
+      // If still no images, assign next available media in order
+      if (imageUrls.length === 0) {
+        while (mediaIndex < unassignedMediaUuids.length) {
+          const uuid = unassignedMediaUuids[mediaIndex];
+          if (!assignedMediaUuids.has(uuid)) {
+            const photoInfo = mediaByUuid.get(uuid);
+            if (photoInfo?.url) {
+              imageUrls.push(photoInfo.url);
+              assignedMediaUuids.add(uuid);
+              mediaIndex++;
+              this.logger.debug(`  Method 3: Sequential assigned media to waypoint: ${photoInfo.url}`);
+              break;
+            }
+          }
+          mediaIndex++;
         }
       }
 
@@ -815,24 +915,19 @@ export class SyncService {
         },
       });
 
-      // Link photos to waypoint
-      if (Array.isArray(photoClientUuids)) {
-        for (const photoUuid of photoClientUuids) {
-          const photoInfo = mediaMapping.get(photoUuid);
-          if (photoInfo) {
-            await db.hikeWaypointPhoto.create({
-              data: {
-                waypointId: waypoint.id,
-                userId,
-                photoUrl: photoInfo.url,
-                latitude: wp.latitude,
-                longitude: wp.longitude,
-                elevation: wp.elevation,
-                timestamp: timestamp,
-              },
-            });
-          }
-        }
+      // Link photos to waypoint for HikeWaypoint model
+      for (const imageUrl of imageUrls) {
+        await db.hikeWaypointPhoto.create({
+          data: {
+            waypointId: waypoint.id,
+            userId,
+            photoUrl: imageUrl,
+            latitude: wp.latitude,
+            longitude: wp.longitude,
+            elevation: wp.elevation,
+            timestamp: timestamp,
+          },
+        });
       }
     }
 

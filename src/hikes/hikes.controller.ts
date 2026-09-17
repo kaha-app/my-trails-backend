@@ -14,7 +14,7 @@ import {
   Param,
   ForbiddenException,
 } from '@nestjs/common';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
 import { HikesService } from './hikes.service';
 import { SyncService } from './services/sync.service';
@@ -156,8 +156,8 @@ export class HikesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(FileFieldsInterceptor([], {
-    limits: { fileSize: 100 * 1024 * 1024 }, // 100MB total
+  @UseInterceptors(AnyFilesInterceptor({
+    limits: { fileSize: 500 * 1024 * 1024 }, // 500MB total for all files
   }))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
@@ -211,7 +211,7 @@ export class HikesController {
     @Request() req: any,
     @Body('data') dataString: string,
     @Headers('idempotency-key') idempotencyKey?: string,
-    @UploadedFiles() files?: Record<string, Express.Multer.File[]>,
+    @UploadedFiles() files?: Express.Multer.File[],
   ): Promise<SyncResponseDto> {
     const userId = BigInt(req.user.id);
 
@@ -227,16 +227,14 @@ export class HikesController {
       throw new Error('Invalid JSON in data field');
     }
 
-    // Convert files object to Map for easy lookup by media UUID
+    // Convert files array to Map for easy lookup by file name (media UUID)
     const fileMap = new Map<string, Express.Multer.File>();
-    if (files) {
-      for (const [fieldName, fileArray] of Object.entries(files)) {
-        if (Array.isArray(fileArray)) {
-          for (const file of fileArray) {
-            // File names should be media UUIDs
-            fileMap.set(file.originalname, file);
-          }
-        }
+    if (files && Array.isArray(files)) {
+      for (const file of files) {
+        // Skip the 'data' field if it's in the files array
+        if (file.fieldname === 'data') continue;
+        // File original names should be media UUIDs sent by client
+        fileMap.set(file.originalname, file);
       }
     }
 

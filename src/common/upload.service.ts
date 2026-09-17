@@ -157,10 +157,19 @@ export class UploadService {
       throw new BadRequestException('File size must be less than 10MB');
     }
 
-    // Validate file type
+    // Validate file type - check both MIME type and extension
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!allowedMimes.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG, and WEBP images are allowed');
+    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+    const fileExt = path.extname(file.originalname).toLowerCase();
+    
+    // Accept if MIME type matches OR file extension matches
+    const mimeValid = allowedMimes.includes(file.mimetype);
+    const extValid = allowedExtensions.includes(fileExt);
+    
+    if (!mimeValid && !extValid) {
+      throw new BadRequestException(
+        `Only JPEG, PNG, and WEBP images are allowed (received: ${file.mimetype}, ext: ${fileExt})`,
+      );
     }
 
     // Create folder path
