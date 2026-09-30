@@ -25,7 +25,7 @@ import {
 } from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, UpdateUserRoleDto } from './dto/update-user.dto';
 import { UploadService } from '../common/upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
@@ -40,6 +40,7 @@ export class UsersController {
   ) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create a new user' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
@@ -75,7 +76,7 @@ export class UsersController {
     @UploadedFile() file: Express.Multer.File,
   ) {
     const avatarUrl = this.uploadService.uploadFile(file, 'avatars');
-    return this.usersService.update(BigInt(id), { avatarUrl });
+    return this.usersService.updateAvatar(BigInt(id), avatarUrl);
   }
 
   @Get()
@@ -142,10 +143,8 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'User not found' })
   async updateRole(
     @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
+    @Body() updateUserDto: UpdateUserRoleDto,
   ) {
-    // In a real app, verify the requesting user is an admin
-    // For now, this is a placeholder - you'd add proper auth guard
-    return this.usersService.update(BigInt(id), updateUserDto);
+    return this.usersService.updateRole(BigInt(id), updateUserDto.role);
   }
 }

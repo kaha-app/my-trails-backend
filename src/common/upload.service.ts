@@ -2,6 +2,7 @@ import { Injectable, BadRequestException } from '@nestjs/common';
 import { Express } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 
 @Injectable()
 export class UploadService {
@@ -12,9 +13,16 @@ export class UploadService {
     if (!fs.existsSync(this.uploadDir)) {
       fs.mkdirSync(this.uploadDir, { recursive: true });
     }
-    
+
     // Pre-create common folders
-    const commonFolders = ['avatars', 'gpx', 'hike-photos', 'trail-covers', 'trail-gallery', 'images'];
+    const commonFolders = [
+      'avatars',
+      'gpx',
+      'hike-photos',
+      'trail-covers',
+      'trail-gallery',
+      'images',
+    ];
     for (const folder of commonFolders) {
       const folderPath = path.join(this.uploadDir, folder);
       if (!fs.existsSync(folderPath)) {
@@ -31,6 +39,37 @@ export class UploadService {
     }
   }
 
+  private validateImageContent(file: Express.Multer.File): void {
+    const b = file.buffer;
+    const jpeg =
+      b.length >= 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
+    const png =
+      b.length >= 8 &&
+      b
+        .subarray(0, 8)
+        .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const gif =
+      b.length >= 6 &&
+      ['GIF87a', 'GIF89a'].includes(b.subarray(0, 6).toString('ascii'));
+    const webp =
+      b.length >= 12 &&
+      b.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      b.subarray(8, 12).toString('ascii') === 'WEBP';
+    if (!jpeg && !png && !gif && !webp) {
+      throw new BadRequestException('File content is not a supported image');
+    }
+  }
+
+  private safeImageExtension(file: Express.Multer.File): string {
+    const extensions: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/gif': '.gif',
+      'image/webp': '.webp',
+    };
+    return extensions[file.mimetype] || '';
+  }
+
   uploadFile(file: Express.Multer.File, folder: string = 'general'): string {
     if (!file) {
       throw new BadRequestException('No file provided');
@@ -45,18 +84,18 @@ export class UploadService {
     // Validate file type (images)
     const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!allowedMimes.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG, GIF, and WebP images are allowed');
+      throw new BadRequestException(
+        'Only JPEG, PNG, GIF, and WebP images are allowed',
+      );
     }
+    this.validateImageContent(file);
 
     // Create folder path
     const folderPath = path.join(this.uploadDir, folder);
     this.ensureFolderExists(folderPath);
 
     // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(7);
-    const ext = path.extname(file.originalname);
-    const filename = `${timestamp}-${randomStr}${ext}`;
+    const filename = `${randomUUID()}${this.safeImageExtension(file)}`;
     const filepath = path.join(folderPath, filename);
 
     // Write file to disk
@@ -84,11 +123,24 @@ export class UploadService {
     if (ext !== '.gpx') {
       throw new BadRequestException('Only .gpx files are allowed');
     }
+    const content = file.buffer.toString(
+      'utf8',
+      0,
+      Math.min(file.buffer.length, 8192),
+    );
+    if (/<!DOCTYPE|<!ENTITY/i.test(content) || !/<gpx\b/i.test(content)) {
+      throw new BadRequestException('Invalid or unsafe GPX document');
+    }
 
     // Accept common GPX MIME types
-    const allowedMimes = ['application/gpx+xml', 'application/xml', 'text/xml', 'application/octet-stream'];
+    const allowedMimes = [
+      'application/gpx+xml',
+      'application/xml',
+      'text/xml',
+      'application/octet-stream',
+    ];
     if (!allowedMimes.includes(file.mimetype)) {
-      console.warn(`⚠️ Unusual MIME type for GPX: ${file.mimetype}, but file extension is .gpx - accepting anyway`);
+      throw new BadRequestException('Unsupported GPX content type');
     }
 
     // Create folder path
@@ -96,9 +148,7 @@ export class UploadService {
     this.ensureFolderExists(folderPath);
 
     // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(7);
-    const filename = `${timestamp}-${randomStr}${ext}`;
+    const filename = `${randomUUID()}${ext}`;
     const filepath = path.join(folderPath, filename);
 
     // Write file to disk
@@ -124,18 +174,18 @@ export class UploadService {
     // Validate file type
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
     if (!allowedMimes.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG, and WEBP images are allowed');
+      throw new BadRequestException(
+        'Only JPEG, PNG, and WEBP images are allowed',
+      );
     }
+    this.validateImageContent(file);
 
     // Create folder path
     const folderPath = path.join(this.uploadDir, 'trail-covers');
     this.ensureFolderExists(folderPath);
 
     // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(7);
-    const ext = path.extname(file.originalname);
-    const filename = `${timestamp}-${randomStr}${ext}`;
+    const filename = `${randomUUID()}${this.safeImageExtension(file)}`;
     const filepath = path.join(folderPath, filename);
 
     // Write file to disk
@@ -159,28 +209,19 @@ export class UploadService {
 
     // Validate file type - check both MIME type and extension
     const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
-    const fileExt = path.extname(file.originalname).toLowerCase();
-    
-    // Accept if MIME type matches OR file extension matches
-    const mimeValid = allowedMimes.includes(file.mimetype);
-    const extValid = allowedExtensions.includes(fileExt);
-    
-    if (!mimeValid && !extValid) {
+    if (!allowedMimes.includes(file.mimetype)) {
       throw new BadRequestException(
-        `Only JPEG, PNG, and WEBP images are allowed (received: ${file.mimetype}, ext: ${fileExt})`,
+        'Only JPEG, PNG, and WEBP images are allowed',
       );
     }
+    this.validateImageContent(file);
 
     // Create folder path
     const folderPath = path.join(this.uploadDir, 'hike-photos');
     this.ensureFolderExists(folderPath);
 
     // Generate unique filename
-    const timestamp = Date.now();
-    const randomStr = Math.random().toString(36).substring(7);
-    const ext = path.extname(file.originalname);
-    const filename = `${timestamp}-${randomStr}${ext}`;
+    const filename = `${randomUUID()}${this.safeImageExtension(file)}`;
     const filepath = path.join(folderPath, filename);
 
     // Write file to disk

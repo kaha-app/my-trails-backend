@@ -11,7 +11,7 @@ export class FavouritesService {
       where: { id: trailId },
     });
 
-    if (!trail) {
+    if (!trail || trail.status !== 'active' || trail.deletedAt) {
       throw new NotFoundException('Trail not found');
     }
 
@@ -29,7 +29,7 @@ export class FavouritesService {
       where: { id: trailId },
     });
 
-    if (!trail) {
+    if (!trail || trail.status !== 'active' || trail.deletedAt) {
       throw new NotFoundException('Trail not found');
     }
 
@@ -46,8 +46,10 @@ export class FavouritesService {
   }
 
   async getUserFavourites(userId: bigint, skip = 0, take = 10) {
+    skip = Number.isInteger(skip) && skip >= 0 ? skip : 0;
+    take = Number.isInteger(take) ? Math.min(Math.max(take, 1), 100) : 10;
     const favourites = await this.prisma.trailFavourite.findMany({
-      where: { userId },
+      where: { userId, trail: { status: 'active', deletedAt: null } },
       skip,
       take,
       include: {
@@ -62,7 +64,7 @@ export class FavouritesService {
     });
 
     const total = await this.prisma.trailFavourite.count({
-      where: { userId },
+      where: { userId, trail: { status: 'active', deletedAt: null } },
     });
 
     return {

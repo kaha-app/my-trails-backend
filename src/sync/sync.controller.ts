@@ -94,7 +94,10 @@ export class SyncController {
     @Request() req: any,
   ) {
     try {
-      const status = await this.syncEngine.getSyncStatus(sessionId);
+      const status = await this.syncEngine.getSyncStatus(
+        sessionId,
+        BigInt(req.user.id),
+      );
       return (
         status || {
           sessionId,

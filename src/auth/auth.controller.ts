@@ -8,7 +8,12 @@ import {
   Request,
   Get,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
@@ -24,9 +29,16 @@ export class AuthController {
   @Post('signup')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user account' })
-  @ApiResponse({ status: 201, description: 'User registered successfully, JWT tokens returned' })
+  @ApiResponse({
+    status: 201,
+    description: 'User registered successfully, JWT tokens returned',
+  })
   @ApiResponse({ status: 409, description: 'Email already registered' })
-  @ApiResponse({ status: 400, description: 'Validation error (passwords do not match, invalid format, etc.)' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Validation error (passwords do not match, invalid format, etc.)',
+  })
   async signup(@Body() signupDto: SignupDto) {
     return this.authService.signup(signupDto);
   }
@@ -34,7 +46,10 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login with email and password' })
-  @ApiResponse({ status: 200, description: 'Login successful, JWT tokens returned' })
+  @ApiResponse({
+    status: 200,
+    description: 'Login successful, JWT tokens returned',
+  })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
@@ -57,24 +72,24 @@ export class AuthController {
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async logout(@Request() req: any) {
-    return this.authService.logout();
+    return this.authService.logout(BigInt(req.user.id));
   }
 
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'User profile retrieved',
     schema: {
       example: {
         id: '1',
         userId: '1',
         email: 'user@example.com',
-        role: 'user'
-      }
-    }
+        role: 'user',
+      },
+    },
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getProfile(@Request() req: any) {
@@ -92,7 +107,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change user password' })
   @ApiResponse({ status: 200, description: 'Password changed successfully' })
-  @ApiResponse({ status: 400, description: 'Validation error (passwords do not match, old password incorrect, etc.)' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Validation error (passwords do not match, old password incorrect, etc.)',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async changePassword(
     @Request() req: any,

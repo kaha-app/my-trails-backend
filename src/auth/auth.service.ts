@@ -18,11 +18,17 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
-  private generateTokens(userId: bigint, email: string, role: string) {
+  private generateTokens(
+    userId: bigint,
+    email: string,
+    role: string,
+    tokenVersion: number,
+  ) {
     const payload = {
       sub: userId.toString(),
       email,
       role,
+      tokenVersion,
     };
 
     const accessToken = this.jwtService.sign(payload, {
@@ -65,6 +71,7 @@ export class AuthService {
       user.id,
       user.email,
       user.role,
+      user.tokenVersion,
     );
 
     return {
@@ -91,6 +98,7 @@ export class AuthService {
       user.id,
       user.email,
       user.role,
+      user.tokenVersion,
     );
 
     return {
@@ -115,9 +123,22 @@ export class AuthService {
       if (user.status !== 'active') {
         throw new UnauthorizedException('User account is unavailable');
       }
+      if (user.tokenVersion !== payload.tokenVersion) {
+        throw new UnauthorizedException('Refresh token has been revoked');
+      }
+      const rotated = await this.usersService.rotateTokenVersion(
+        user.id,
+        user.tokenVersion,
+      );
+      if (!rotated) throw new UnauthorizedException('Refresh token was reused');
 
       const { accessToken, refreshToken: newRefreshToken } =
-        this.generateTokens(user.id, user.email, user.role);
+        this.generateTokens(
+          user.id,
+          user.email,
+          user.role,
+          rotated.tokenVersion,
+        );
 
       return {
         accessToken,
@@ -128,9 +149,8 @@ export class AuthService {
     }
   }
 
-  async logout() {
-    // JWT is stateless, so logout is handled on client side by removing token
-    // We can optionally add token blacklisting here if needed
+  async logout(userId: bigint) {
+    await this.usersService.revokeTokens(userId);
     return {
       message: 'Logged out successfully',
     };

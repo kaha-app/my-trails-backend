@@ -119,10 +119,7 @@ export class SyncEngineService {
           });
 
           if (updatedEntry.retryCount >= updatedEntry.maxRetries) {
-            await this.retryService.markRetryExhausted(
-              item.id,
-              errorMsg,
-            );
+            await this.retryService.markRetryExhausted(item.id, errorMsg);
           }
         }
       } catch (error) {
@@ -162,11 +159,7 @@ export class SyncEngineService {
 
       if (dispatchResult.success) {
         // Step 4: Move to acknowledgement
-        await this.acknowledgeSync(
-          item,
-          dispatchResult.remoteData,
-          userId,
-        );
+        await this.acknowledgeSync(item, dispatchResult.remoteData, userId);
         result.itemsSucceeded++;
       } else {
         // Add to retry queue
@@ -241,7 +234,10 @@ export class SyncEngineService {
   /**
    * Handle create operation
    */
-  private async dispatchCreate(payload: any, userId: bigint): Promise<{
+  private async dispatchCreate(
+    payload: any,
+    userId: bigint,
+  ): Promise<{
     success: boolean;
     remoteData?: any;
     error?: string;
@@ -391,7 +387,10 @@ export class SyncEngineService {
   /**
    * Add failed item to retry queue
    */
-  private async addToRetryQueue(item: any, error: string | undefined): Promise<void> {
+  private async addToRetryQueue(
+    item: any,
+    error: string | undefined,
+  ): Promise<void> {
     const errorMessage = error || 'Unknown error';
     const isRetriable = this.retryService.isRetriableError({
       message: errorMessage,
@@ -456,9 +455,9 @@ export class SyncEngineService {
   /**
    * Get sync status for a session
    */
-  async getSyncStatus(sessionId: string) {
-    return this.prismaAny.hikeSyncStatus.findUnique({
-      where: { sessionId },
+  async getSyncStatus(sessionId: string, userId: bigint) {
+    return this.prismaAny.hikeSyncStatus.findFirst({
+      where: { sessionId, userId },
     });
   }
 
@@ -468,7 +467,8 @@ export class SyncEngineService {
   async getSyncStats(userId: bigint) {
     const pending = await this.outboxService.countPendingItems(userId);
     const retryStats = await this.retryService.getRetryStats(userId);
-    const conflicts = await this.acknowledgementService.getPendingConflicts(userId);
+    const conflicts =
+      await this.acknowledgementService.getPendingConflicts(userId);
 
     return {
       pendingItems: pending,

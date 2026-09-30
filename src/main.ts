@@ -18,6 +18,58 @@ const jsonStringify = (obj: any) => {
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const express = app.getHttpAdapter().getInstance();
+  express.disable('x-powered-by');
+  if (process.env.TRUST_PROXY === 'true') express.set('trust proxy', 1);
+
+  app.use((req: any, res: any, next: any) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=()',
+    );
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'none'; frame-ancestors 'none'",
+    );
+    if (process.env.NODE_ENV === 'production') {
+      res.setHeader(
+        'Strict-Transport-Security',
+        'max-age=31536000; includeSubDomains',
+      );
+    }
+    next();
+  });
+
+  const attempts = new Map<string, { count: number; resetAt: number }>();
+  app.use('/api/auth', (req: any, res: any, next: any) => {
+    if (
+      !['/login', '/signup', '/refresh'].includes(req.path) ||
+      req.method !== 'POST'
+    )
+      return next();
+    const now = Date.now();
+    const key = `${req.ip}:${req.path}`;
+    const record = attempts.get(key);
+    const current =
+      !record || record.resetAt <= now
+        ? { count: 0, resetAt: now + 15 * 60 * 1000 }
+        : record;
+    current.count += 1;
+    attempts.set(key, current);
+    res.setHeader('RateLimit-Limit', '10');
+    res.setHeader(
+      'RateLimit-Remaining',
+      String(Math.max(0, 10 - current.count)),
+    );
+    if (current.count > 10)
+      return res
+        .status(429)
+        .json({ statusCode: 429, message: 'Too many authentication attempts' });
+    next();
+  });
 
   // Enable CORS - IMPORTANT for mobile apps
   const allowedOrigins = (process.env.CORS_ORIGINS || '')
@@ -94,8 +146,13 @@ async function bootstrap() {
     .addTag('Hikes', 'Hike recording endpoints')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
+  if (
+    process.env.NODE_ENV !== 'production' ||
+    process.env.ENABLE_SWAGGER === 'true'
+  ) {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('api', app, document);
+  }
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port, '0.0.0.0');
