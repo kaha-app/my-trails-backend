@@ -14,11 +14,21 @@ import {
   Param,
   ForbiddenException,
 } from '@nestjs/common';
-import { FileFieldsInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiConsumes, ApiBody, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  AnyFilesInterceptor,
+  FileFieldsInterceptor,
+} from '@nestjs/platform-express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiConsumes,
+  ApiBody,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { HikesService } from './hikes.service';
 import { SyncService } from './services/sync.service';
-import { SyncHikeDto } from './dto/sync-hike.dto';
 import { SyncRequestDto, SyncResponseDto } from './dto/sync-trail.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 import { PrismaService } from '../prisma/prisma.service';
@@ -36,8 +46,18 @@ export class HikesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get list of synced hikes' })
-  @ApiQuery({ name: 'skip', required: false, type: Number, description: 'Number of records to skip' })
-  @ApiQuery({ name: 'take', required: false, type: Number, description: 'Number of records to retrieve' })
+  @ApiQuery({
+    name: 'skip',
+    required: false,
+    type: Number,
+    description: 'Number of records to skip',
+  })
+  @ApiQuery({
+    name: 'take',
+    required: false,
+    type: Number,
+    description: 'Number of records to retrieve',
+  })
   @ApiResponse({
     status: 200,
     description: 'List of synced hikes',
@@ -156,9 +176,11 @@ export class HikesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.OK)
-  @UseInterceptors(AnyFilesInterceptor({
-    limits: { fileSize: 500 * 1024 * 1024 }, // 500MB total for all files
-  }))
+  @UseInterceptors(
+    AnyFilesInterceptor({
+      limits: { fileSize: 10 * 1024 * 1024, files: 50, fields: 10 },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Sync complete hike with all data and images',
@@ -177,13 +199,23 @@ export class HikesController {
         acknowledgedLocalRevision: 3,
         clientUuid: 'stable-hike-uuid',
         sessionMappings: {
-          'session-uuid-1': { clientUuid: 'session-uuid-1', serverId: 'session-id' },
+          'session-uuid-1': {
+            clientUuid: 'session-uuid-1',
+            serverId: 'session-id',
+          },
         },
         waypointMappings: {
-          'waypoint-uuid-1': { clientUuid: 'waypoint-uuid-1', serverId: 'waypoint-id' },
+          'waypoint-uuid-1': {
+            clientUuid: 'waypoint-uuid-1',
+            serverId: 'waypoint-id',
+          },
         },
         mediaMappings: {
-          'media-uuid-1': { clientUuid: 'media-uuid-1', serverMediaId: 'media-id', url: 'https://...' },
+          'media-uuid-1': {
+            clientUuid: 'media-uuid-1',
+            serverMediaId: 'media-id',
+            url: 'https://...',
+          },
         },
         trackPointCount: 250,
         waypointCount: 5,
@@ -192,9 +224,15 @@ export class HikesController {
       },
     },
   })
-  @ApiResponse({ status: 400, description: 'Invalid request or schema version' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request or schema version',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 409, description: 'Conflict: server version mismatch' })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict: server version mismatch',
+  })
   @ApiBody({
     schema: {
       type: 'object',
@@ -216,43 +254,57 @@ export class HikesController {
     const userId = BigInt(req.user.id);
 
     if (!idempotencyKey) {
-      throw new Error('Idempotency-Key header required in format: clientUuid:localRevision');
+      throw new Error(
+        'Idempotency-Key header required in format: clientUuid:localRevision',
+      );
     }
 
     // Parse request data
     let requestData: SyncRequestDto;
     try {
-      requestData = typeof dataString === 'string' ? JSON.parse(dataString) : dataString;
+      requestData =
+        typeof dataString === 'string' ? JSON.parse(dataString) : dataString;
     } catch (e) {
       throw new Error('Invalid JSON in data field');
     }
 
     // Convert files array to Map for easy lookup by file name (media UUID)
     const fileMap = new Map<string, Express.Multer.File>();
-    if (files && Array.isArray(files)) {
+    if (files) {
       for (const file of files) {
-        // Skip the 'data' field if it's in the files array
         if (file.fieldname === 'data') continue;
-        // File original names should be media UUIDs sent by client
-        fileMap.set(file.originalname, file);
+        fileMap.set(file.fieldname, file);
+        if (!fileMap.has(file.originalname))
+          fileMap.set(file.originalname, file);
       }
     }
 
-    return this.syncService.syncTrail(userId, idempotencyKey, requestData, fileMap);
+    return this.syncService.syncTrail(
+      userId,
+      idempotencyKey,
+      requestData,
+      fileMap,
+    );
   }
   @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileFieldsInterceptor([
-    { name: 'photos', maxCount: 50 }, // Support up to 50 photos
-  ], {
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
-  }))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'photos', maxCount: 50 }, // Support up to 50 photos
+      ],
+      {
+        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB per file
+      },
+    ),
+  )
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Sync offline hike session with photos',
-    description: 'Upload complete hike session with track points, waypoints, and photos in one multipart request. Perfect for offline-first recording.'
+    description:
+      'Upload complete hike session with track points, waypoints, and photos in one multipart request. Perfect for offline-first recording.',
   })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'Hike session synced successfully',
     schema: {
       example: {
@@ -276,14 +328,14 @@ export class HikesController {
               {
                 localId: 'photo_001',
                 serverId: 789,
-                url: '/uploads/hike-photos/photo_001.jpg'
-              }
-            ]
-          }
+                url: '/uploads/hike-photos/photo_001.jpg',
+              },
+            ],
+          },
         ],
-        message: 'Hike synced successfully with photos'
-      }
-    }
+        message: 'Hike synced successfully with photos',
+      },
+    },
   })
   @ApiResponse({ status: 400, description: 'Invalid data or photo format' })
   @ApiBody({
@@ -292,36 +344,60 @@ export class HikesController {
       properties: {
         data: {
           type: 'string',
-          description: 'JSON string containing hike session data with waypoints that reference photo IDs',
-          example: '{"trailId":0,"userId":1,"startTime":"2026-08-19T10:30:00Z",...}'
+          description:
+            'JSON string containing hike session data with waypoints that reference photo IDs',
+          example:
+            '{"trailId":0,"userId":1,"startTime":"2026-08-19T10:30:00Z",...}',
         },
         photos: {
           type: 'array',
           items: { type: 'string', format: 'binary' },
-          description: 'Photo files from waypoints (up to 50 files, 10MB each)'
-        }
+          description: 'Photo files from waypoints (up to 50 files, 10MB each)',
+        },
       },
-      required: ['data']
-    }
+      required: ['data'],
+    },
   })
   async syncHike(
     @Body() body: any,
-    @UploadedFiles() files?: { photos?: Express.Multer.File[] }
+    @UploadedFiles() files?: { photos?: Express.Multer.File[] },
   ) {
     return this.hikesService.syncHike(body.data, files?.photos);
   }
 
   @Get('records')
-  @ApiOperation({ 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({
     summary: 'Get recording history',
-    description: 'Retrieve all recorded hike sessions with pagination'
+    description: 'Retrieve all recorded hike sessions with pagination',
   })
-  @ApiQuery({ name: 'skip', required: false, type: Number, description: 'Number of records to skip' })
-  @ApiQuery({ name: 'take', required: false, type: Number, description: 'Number of records to retrieve' })
-  @ApiQuery({ name: 'userId', required: false, type: Number, description: 'Filter by user ID' })
-  @ApiQuery({ name: 'trailId', required: false, type: Number, description: 'Filter by trail ID' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiQuery({
+    name: 'skip',
+    required: false,
+    type: Number,
+    description: 'Number of records to skip',
+  })
+  @ApiQuery({
+    name: 'take',
+    required: false,
+    type: Number,
+    description: 'Number of records to retrieve',
+  })
+  @ApiQuery({
+    name: 'userId',
+    required: false,
+    type: Number,
+    description: 'Filter by user ID',
+  })
+  @ApiQuery({
+    name: 'trailId',
+    required: false,
+    type: Number,
+    description: 'Filter by trail ID',
+  })
+  @ApiResponse({
+    status: 200,
     description: 'Recording history retrieved successfully',
     schema: {
       example: {
@@ -337,16 +413,17 @@ export class HikesController {
             totalAltitude: 450,
             trackPointsCount: 150,
             waypointsCount: 5,
-            createdAt: '2026-08-19T14:30:00Z'
-          }
+            createdAt: '2026-08-19T14:30:00Z',
+          },
         ],
         total: 25,
         skip: 0,
-        take: 10
-      }
-    }
+        take: 10,
+      },
+    },
   })
   async getRecordingHistory(
+    @Request() req: any,
     @Query('skip') skip?: string,
     @Query('take') take?: string,
     @Query('userId') userId?: string,
@@ -355,7 +432,10 @@ export class HikesController {
     const skipNum = skip ? parseInt(skip) : 0;
     const takeNum = take ? parseInt(take) : 10;
     const filters: any = {};
-    if (userId) filters.userId = BigInt(userId);
+    filters.userId =
+      req.user.role === 'admin' && userId
+        ? BigInt(userId)
+        : BigInt(req.user.id);
     if (trailId) filters.trailId = BigInt(trailId);
 
     return this.hikesService.getRecordingHistory(skipNum, takeNum, filters);

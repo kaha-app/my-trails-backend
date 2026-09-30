@@ -11,15 +11,25 @@ import {
   HttpStatus,
   UseInterceptors,
   UploadedFile,
-  ForbiddenException,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UploadService } from '../common/upload.service';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
+import { SelfOrAdminGuard } from '../auth/guards/self-or-admin.guard';
 
 @ApiTags('Users')
 @Controller('users')
@@ -39,6 +49,7 @@ export class UsersController {
   }
 
   @Post(':id/avatar')
+  @UseGuards(JwtAuthGuard, SelfOrAdminGuard)
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -68,20 +79,29 @@ export class UsersController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiOperation({ summary: 'Get all users with pagination' })
-  @ApiQuery({ name: 'skip', required: false, type: Number, description: 'Number of users to skip' })
-  @ApiQuery({ name: 'take', required: false, type: Number, description: 'Number of users to take' })
+  @ApiQuery({
+    name: 'skip',
+    required: false,
+    type: Number,
+    description: 'Number of users to skip',
+  })
+  @ApiQuery({
+    name: 'take',
+    required: false,
+    type: Number,
+    description: 'Number of users to take',
+  })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
-  async findAll(
-    @Query('skip') skip?: string,
-    @Query('take') take?: string,
-  ) {
+  async findAll(@Query('skip') skip?: string, @Query('take') take?: string) {
     const skipNum = skip ? parseInt(skip) : 0;
     const takeNum = take ? parseInt(take) : 10;
     return this.usersService.findAll(skipNum, takeNum);
   }
 
   @Get(':id')
+  @UseGuards(JwtAuthGuard, SelfOrAdminGuard)
   @ApiOperation({ summary: 'Get user by ID' })
   @ApiResponse({ status: 200, description: 'User retrieved successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
@@ -90,18 +110,17 @@ export class UsersController {
   }
 
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, SelfOrAdminGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  async update(
-    @Param('id') id: string,
-    @Body() updateUserDto: UpdateUserDto,
-  ) {
+  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(BigInt(id), updateUserDto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, SelfOrAdminGuard)
   @ApiBearerAuth('access-token')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete user' })
@@ -112,10 +131,14 @@ export class UsersController {
   }
 
   @Patch(':id/role')
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update user role (admin only)' })
   @ApiResponse({ status: 200, description: 'User role updated successfully' })
-  @ApiResponse({ status: 403, description: 'Forbidden - only admins can update roles' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - only admins can update roles',
+  })
   @ApiResponse({ status: 404, description: 'User not found' })
   async updateRole(
     @Param('id') id: string,

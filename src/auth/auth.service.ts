@@ -1,4 +1,9 @@
-import { Injectable, UnauthorizedException, BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
@@ -56,7 +61,11 @@ export class AuthService {
     });
 
     // Generate tokens
-    const { accessToken, refreshToken } = this.generateTokens(user.id, user.email, user.role);
+    const { accessToken, refreshToken } = this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+    );
 
     return {
       accessToken,
@@ -78,7 +87,11 @@ export class AuthService {
     await this.usersService.updateLastLogin(user.id);
 
     // Generate tokens
-    const { accessToken, refreshToken } = this.generateTokens(user.id, user.email, user.role);
+    const { accessToken, refreshToken } = this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+    );
 
     return {
       accessToken,
@@ -98,12 +111,13 @@ export class AuthService {
       const payload = this.jwtService.verify(refreshToken, {
         secret: jwtConfig.refreshSecret,
       });
+      const user = await this.usersService.findById(BigInt(payload.sub));
+      if (user.status !== 'active') {
+        throw new UnauthorizedException('User account is unavailable');
+      }
 
-      const { accessToken, refreshToken: newRefreshToken } = this.generateTokens(
-        BigInt(payload.sub),
-        payload.email,
-        payload.role,
-      );
+      const { accessToken, refreshToken: newRefreshToken } =
+        this.generateTokens(user.id, user.email, user.role);
 
       return {
         accessToken,
@@ -125,7 +139,7 @@ export class AuthService {
   async validateUser(email: string, password: string) {
     const user = await this.usersService.findByEmail(email);
 
-    if (!user || !user.passwordHash) {
+    if (!user || !user.passwordHash || user.status !== 'active') {
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -146,15 +160,24 @@ export class AuthService {
     }
   }
 
-  async changePassword(userId: bigint, oldPassword: string, newPassword: string, confirmPassword: string) {
+  async changePassword(
+    userId: bigint,
+    oldPassword: string,
+    newPassword: string,
+    confirmPassword: string,
+  ) {
     // Validate new password matches confirm password
     if (newPassword !== confirmPassword) {
-      throw new BadRequestException('New password and confirm password do not match');
+      throw new BadRequestException(
+        'New password and confirm password do not match',
+      );
     }
 
     // Validate new password is different from old password
     if (oldPassword === newPassword) {
-      throw new BadRequestException('New password must be different from old password');
+      throw new BadRequestException(
+        'New password must be different from old password',
+      );
     }
 
     // Get user by ID (including password hash)
@@ -164,7 +187,10 @@ export class AuthService {
     }
 
     // Verify old password
-    const isPasswordValid = await bcrypt.compare(oldPassword, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      oldPassword,
+      user.passwordHash,
+    );
     if (!isPasswordValid) {
       throw new BadRequestException('Old password is incorrect');
     }

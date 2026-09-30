@@ -13,7 +13,7 @@ describe('recording fields reach draft trail details', () => {
       syncJobRecord: {
         findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 9n }),
-        update: jest.fn(),
+        update: jest.fn().mockResolvedValue({}),
       },
       hikeSyncTracker: {
         findUnique: jest.fn().mockResolvedValue(tracker),
@@ -26,7 +26,14 @@ describe('recording fields reach draft trail details', () => {
       },
       trail: {
         findUnique: jest.fn().mockResolvedValue({ id: 16n }),
+        update: jest.fn().mockResolvedValue({ id: 16n }),
         create: jest.fn(),
+      },
+      trailLocation: { upsert: jest.fn().mockResolvedValue({}) },
+      hikeWaypoint: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
+      hikeSession: {
+        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: jest.fn().mockResolvedValue({ id: 'session-2' }),
       },
     };
     const service = new SyncService(db, {} as any);
@@ -48,6 +55,15 @@ describe('recording fields reach draft trail details', () => {
     expect(result.rootServerId).toBe('16');
     expect(result.committedServerVersion).toBe(2);
     expect(db.trail.create).not.toHaveBeenCalled();
+    expect(db.trail.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 16n },
+        data: expect.objectContaining({ hikeName: 'Edited name' }),
+      }),
+    );
+    expect(db.hikeSession.deleteMany).toHaveBeenCalledWith({
+      where: { trailId: 16n },
+    });
   });
 
   test('stores maxAltitudeM and does not interpret minutes as days', async () => {

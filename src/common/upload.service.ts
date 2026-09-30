@@ -5,7 +5,7 @@ import * as path from 'path';
 
 @Injectable()
 export class UploadService {
-  private uploadDir = 'uploads';
+  private uploadDir = process.env.UPLOAD_DIR || 'uploads';
 
   constructor() {
     // Create uploads directory if it doesn't exist

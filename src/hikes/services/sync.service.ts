@@ -68,7 +68,9 @@ export class SyncService {
         return this.buildSyncResponse(tracker, requestData, userId);
       }
 
-      if (existingJob && !existingJob.completedAt) {
+      if (existingJob?.status === 'failed') {
+        await db.syncJobRecord.delete({ where: { id: existingJob.id } });
+      } else if (existingJob && !existingJob.completedAt) {
         throw new BadRequestException(
           'Sync already in progress for this revision',
         );
@@ -126,38 +128,6 @@ export class SyncService {
       });
 
       try {
-        // A newer local revision belongs to the same recorded hike. The
-        // tracker already owns its server trail, so acknowledge the revision
-        // against that identity instead of creating another draft card.
-        if (existingTracker.serverId) {
-          const serverTrailId = BigInt(existingTracker.serverId);
-          const serverTrail = await db.trail.findUnique({
-            where: { id: serverTrailId },
-          });
-          if (serverTrail) {
-            const newServerVersion = (existingTracker.serverVersion || 0) + 1;
-            const updatedTracker = await db.hikeSyncTracker.update({
-              where: { id: existingTracker.id },
-              data: {
-                localRevision,
-                syncedRevision: localRevision,
-                serverVersion: newServerVersion,
-                syncStatus: 'synced',
-                lastSyncedAt: new Date(),
-                lastSyncError: null,
-              },
-            });
-            await db.syncJobRecord.update({
-              where: { id: syncJob.id },
-              data: { status: 'synced', completedAt: new Date() },
-            });
-            this.logger.log(
-              `Synced revision ${localRevision} to existing trail ${serverTrailId}`,
-            );
-            return this.buildSyncResponse(updatedTracker, requestData, userId);
-          }
-        }
-
         // Process media uploads
         const mediaMapping = await this.processMediaUploads(
           existingTracker.id,
@@ -167,8 +137,23 @@ export class SyncService {
           db,
         );
 
-        // Create actual trail entry with synced hike details
-        const trailId = await this.createTrailFromSync(requestData.trail, db);
+        // Revisions update the same draft. User-authored relational details are
+        // preserved while recorded sessions, route points and waypoints are replaced.
+        const existingTrailId = existingTracker.serverId
+          ? BigInt(existingTracker.serverId)
+          : null;
+        const trailId = existingTrailId
+          ? await this.updateTrailFromSync(
+              existingTrailId,
+              requestData.trail,
+              db,
+            )
+          : await this.createTrailFromSync(requestData.trail, db, userId);
+
+        if (existingTrailId) {
+          await db.hikeWaypoint.deleteMany({ where: { trailId } });
+          await db.hikeSession.deleteMany({ where: { trailId } });
+        }
 
         // Attach uploaded trail images so GET /trails/:id can return them.
         for (const media of requestData.media as any[]) {
@@ -177,14 +162,19 @@ export class SyncService {
           );
           const type = media.type ?? media.mediaType;
           if (uploaded && ['cover', 'route', 'gallery'].includes(type)) {
-            await db.trailMedia.create({
-              data: {
-                trailId,
-                type,
-                url: uploaded.url,
-                altText: media.caption ?? null,
-              },
+            const duplicate = await db.trailMedia.findFirst({
+              where: { trailId, url: uploaded.url },
             });
+            if (!duplicate) {
+              await db.trailMedia.create({
+                data: {
+                  trailId,
+                  type,
+                  url: uploaded.url,
+                  altText: media.caption ?? null,
+                },
+              });
+            }
           }
         }
 
@@ -240,7 +230,12 @@ export class SyncService {
         });
 
         const response = this.buildSyncResponse(
-          { ...existingTracker, serverId: trailId.toString() },
+          {
+            ...existingTracker,
+            serverId: trailId.toString(),
+            serverVersion: newServerVersion,
+            syncedRevision: localRevision,
+          },
           requestData,
           userId,
           {
@@ -320,6 +315,43 @@ export class SyncService {
       throw new BadRequestException(
         `Images exceed limit of ${this.MAX_IMAGES}`,
       );
+    }
+    if (!data.trail.name?.trim())
+      throw new BadRequestException('trail.name required');
+    if (!data.trail.region?.trim())
+      throw new BadRequestException('trail.region required');
+    if (!data.trail.country?.trim())
+      throw new BadRequestException('trail.country required');
+    for (const point of data.trackPoints) {
+      if (
+        !Number.isFinite(point.latitude) ||
+        point.latitude < -90 ||
+        point.latitude > 90 ||
+        !Number.isFinite(point.longitude) ||
+        point.longitude < -180 ||
+        point.longitude > 180 ||
+        Number.isNaN(Date.parse(point.timestamp))
+      ) {
+        throw new BadRequestException(
+          'Invalid track point coordinates or timestamp',
+        );
+      }
+    }
+    for (const waypoint of data.waypoints) {
+      if (
+        !waypoint.clientUuid ||
+        !Number.isFinite(waypoint.latitude) ||
+        !Number.isFinite(waypoint.longitude)
+      ) {
+        throw new BadRequestException('Invalid waypoint');
+      }
+    }
+    const mediaIds = new Set<string>();
+    for (const media of data.media) {
+      if (!media.clientUuid || mediaIds.has(media.clientUuid)) {
+        throw new BadRequestException('Media UUIDs must be present and unique');
+      }
+      mediaIds.add(media.clientUuid);
     }
   }
 
@@ -422,7 +454,88 @@ export class SyncService {
     return mediaMapping;
   }
 
-  private async createTrailFromSync(trail: any, db: any): Promise<bigint> {
+  private async updateTrailFromSync(
+    trailId: bigint,
+    trail: any,
+    db: any,
+  ): Promise<bigint> {
+    const existing = await db.trail.findUnique({ where: { id: trailId } });
+    if (!existing)
+      throw new BadRequestException('Previously synced trail no longer exists');
+
+    const data: any = {
+      sourceUpdatedAt: new Date(trail.recordedAt ?? Date.now()),
+    };
+    if (trail.name != null) data.hikeName = trail.name;
+    if (trail.description != null) data.description = trail.description;
+    if (trail.activity != null) data.activity = trail.activity;
+    if (trail.difficulty != null) data.difficulty = trail.difficulty;
+    if (trail.difficultyRating != null)
+      data.difficultyRating = Number(trail.difficultyRating);
+    if (trail.distance != null) {
+      data.distanceMinKm = Number(trail.distance);
+      data.distanceMaxKm = Number(trail.distance);
+    }
+    if (trail.walkingTimeMin != null)
+      data.walkingTimeMinMinutes = Number(trail.walkingTimeMin);
+    if (trail.walkingTimeMax != null)
+      data.walkingTimeMaxMinutes = Number(trail.walkingTimeMax);
+    if (trail.maxAltitudeM != null || trail.maxAltitude != null) {
+      data.maxAltitudeM = Math.round(
+        Number(trail.maxAltitudeM ?? trail.maxAltitude),
+      );
+    }
+    if (trail.duration != null) {
+      data.durationLabel = String(trail.duration);
+      const days = String(trail.duration).match(/^(\d+(?:\.\d+)?)\s*days?$/i);
+      if (days) data.durationDays = Number(days[1]);
+    }
+    await db.trail.update({ where: { id: trailId }, data });
+
+    if (
+      trail.region != null ||
+      trail.country != null ||
+      trail.startingPoint != null
+    ) {
+      await db.trailLocation.upsert({
+        where: { trailId },
+        update: {
+          ...(trail.region != null ? { region: trail.region } : {}),
+          ...(trail.country != null ? { country: trail.country } : {}),
+          ...(trail.startingPoint != null
+            ? { startPoint: trail.startingPoint }
+            : {}),
+          ...(trail.distanceFromCityKm != null
+            ? { distanceFromCityKm: Number(trail.distanceFromCityKm) }
+            : {}),
+        },
+        create: {
+          trailId,
+          region: trail.region || 'Unknown',
+          country: trail.country || 'Unknown',
+          startPoint: trail.startingPoint ?? null,
+          distanceFromCityKm:
+            trail.distanceFromCityKm == null
+              ? null
+              : Number(trail.distanceFromCityKm),
+        },
+      });
+    }
+    if (trail.transportation) {
+      await db.trailTransportation.upsert({
+        where: { trailId },
+        update: trail.transportation,
+        create: { trailId, ...trail.transportation },
+      });
+    }
+    return trailId;
+  }
+
+  private async createTrailFromSync(
+    trail: any,
+    db: any,
+    ownerUserId?: bigint,
+  ): Promise<bigint> {
     // Map difficulty to valid enum or null
     const validDifficulties = [
       'easy',
@@ -508,6 +621,7 @@ export class SyncService {
       fitnessRequirement: trail.fitnessRequirement || null,
       bestTimeNotes: trail.bestTimeNotes || null,
       status: 'draft',
+      ownerUserId,
     };
 
     let newTrail;
@@ -770,6 +884,7 @@ export class SyncService {
     db: any,
   ): Promise<Map<string, { clientUuid: string; serverId: string }>> {
     const waypointMappings = new Map();
+    if (!waypoints.length) return waypointMappings;
     const sessionId = Array.from(sessionMappings.values())[0]?.serverId;
     if (!sessionId) return waypointMappings;
 

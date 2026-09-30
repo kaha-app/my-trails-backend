@@ -4,6 +4,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { resolve } from 'path';
 
 // Custom BigInt serializer for JSON
 const jsonStringify = (obj: any) => {
@@ -19,16 +20,20 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // Enable CORS - IMPORTANT for mobile apps
+  const allowedOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
   app.enableCors({
-    origin: '*',
+    origin: allowedOrigins.length ? allowedOrigins : false,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
   });
 
   // Serve static files BEFORE setting global prefix
   // This ensures /uploads/... is accessible without /api prefix
-  app.useStaticAssets('uploads', {
+  app.useStaticAssets(resolve(process.env.UPLOAD_DIR || 'uploads'), {
     prefix: '/uploads',
   });
 
@@ -50,7 +55,7 @@ async function bootstrap() {
         enableImplicitConversion: true,
       },
       exceptionFactory: (errors) => {
-        const messages = errors.map(error => ({
+        const messages = errors.map((error) => ({
           property: error.property,
           constraints: error.constraints,
         }));
@@ -78,7 +83,10 @@ async function bootstrap() {
     .setTitle('Hiking & Trail Management API')
     .setDescription('API for hiking trails, reviews, and user management')
     .setVersion('1.0.0')
-    .addBearerAuth({type: 'http', scheme: 'bearer', bearerFormat: 'JWT'}, 'access-token')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'access-token',
+    )
     .addTag('Users', 'User management endpoints')
     .addTag('Auth', 'Authentication endpoints')
     .addTag('Trails', 'Trail management endpoints')
@@ -91,7 +99,7 @@ async function bootstrap() {
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port, '0.0.0.0');
-  console.log(`✅ Server is running on http://0.0.0.0:${port} (accessible from http://192.168.1.68:${port})`);
+  console.log(`Server is listening on port ${port}`);
   console.log(`📚 Swagger UI available at http://0.0.0.0:${port}/api`);
   console.log(`📁 Static files served from /uploads and /assets`);
 }

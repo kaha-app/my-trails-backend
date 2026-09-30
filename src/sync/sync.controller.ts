@@ -9,13 +9,21 @@ import {
   Request,
   Logger,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiQuery,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { SyncEngineService } from './sync-engine.service';
 import { SyncStatusDto, SyncStatsDto } from './dto/sync-hike-response.dto';
+import { JwtAuthGuard } from '../auth/guards/jwt.guard';
 
 @ApiTags('Sync')
 @Controller('sync')
 @ApiBearerAuth('JWT')
+@UseGuards(JwtAuthGuard)
 export class SyncController {
   private readonly logger = new Logger(SyncController.name);
 
@@ -68,7 +76,8 @@ export class SyncController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get sync status for a hike session',
-    description: 'Returns current sync state, retry count, and last sync attempt',
+    description:
+      'Returns current sync state, retry count, and last sync attempt',
   })
   @ApiQuery({
     name: 'sessionId',
@@ -86,11 +95,13 @@ export class SyncController {
   ) {
     try {
       const status = await this.syncEngine.getSyncStatus(sessionId);
-      return status || {
-        sessionId,
-        isSynced: false,
-        retryCount: 0,
-      };
+      return (
+        status || {
+          sessionId,
+          isSynced: false,
+          retryCount: 0,
+        }
+      );
     } catch (error) {
       this.logger.error(`Error getting sync status for ${sessionId}:`, error);
       throw error;

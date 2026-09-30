@@ -33,7 +33,7 @@ export class TrailsService {
     private uploadService: UploadService,
   ) {}
 
-  async create(createTrailDto: CreateTrailDto) {
+  async create(createTrailDto: CreateTrailDto, ownerUserId: bigint) {
     // Check if slug already exists
     const existingTrail = await this.prisma.trail.findUnique({
       where: { slug: createTrailDto.slug },
@@ -48,6 +48,7 @@ export class TrailsService {
     return this.prisma.trail.create({
       data: {
         ...trailData,
+        ownerUserId,
         activity: trailData.activity || 'hiking',
         routeFilePath: gpxFilePath,
         routeFileType: gpxFilePath ? 'gpx' : undefined,
@@ -76,9 +77,10 @@ export class TrailsService {
   }
 
   async findAll(skip = 0, take = 10, filters?: any) {
-    const where: any = {};
+    skip = Number.isInteger(skip) && skip >= 0 ? skip : 0;
+    take = Number.isInteger(take) ? Math.min(Math.max(take, 1), 100) : 10;
+    const where: any = { status: 'active', deletedAt: null };
 
-    if (filters?.status) where.status = filters.status;
     if (filters?.difficulty) where.difficulty = filters.difficulty;
     if (filters?.activity) where.activity = filters.activity;
     if (filters?.search) {
@@ -115,6 +117,31 @@ export class TrailsService {
       skip,
       take,
     };
+  }
+
+  async findMine(ownerUserId: bigint, skip = 0, take = 10) {
+    skip = Number.isInteger(skip) && skip >= 0 ? skip : 0;
+    take = Number.isInteger(take) ? Math.min(Math.max(take, 1), 100) : 10;
+    const where = { ownerUserId, deletedAt: null };
+    const [data, total] = await this.prisma.$transaction([
+      this.prisma.trail.findMany({
+        where,
+        skip,
+        take,
+        include: { location: true, ratingSummary: true, media: true },
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.trail.count({ where }),
+    ]);
+    return { data, total, skip, take };
+  }
+
+  async findPublishedById(id: bigint) {
+    const trail = await this.findById(id);
+    if (trail.status !== 'active' || trail.deletedAt) {
+      throw new NotFoundException('Trail not found');
+    }
+    return trail;
   }
 
   async findById(id: bigint) {
@@ -156,14 +183,12 @@ export class TrailsService {
           take: 5,
           orderBy: { createdAt: 'desc' },
         },
-        favourites: true,
       },
     });
 
     if (!trail) {
       throw new NotFoundException('Trail not found');
     }
-
     // Extract cover photo from media array for convenience
     const coverPhoto = trail.media.find((m: any) => m.type === 'cover');
 
@@ -560,10 +585,8 @@ export class TrailsService {
       throw new NotFoundException('Trail not found');
     }
 
-    const newStatus = trail.status === 'active' ? 'draft' : 'active';
-    if (newStatus === 'active') {
-      this.validateForPublish(trail);
-    }
+    const newStatus = 'active';
+    this.validateForPublish(trail);
 
     return this.prisma.trail.update({
       where: { id },
@@ -905,7 +928,8 @@ export class TrailsService {
         },
       },
     });
-    if (!trail) throw new NotFoundException('Trail not found');
+    if (!trail || trail.status !== 'active' || trail.deletedAt)
+      throw new NotFoundException('Trail not found');
     const filePath = trail.routeFilePath && `.${trail.routeFilePath}`;
     if (
       filePath &&
