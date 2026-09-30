@@ -23,6 +23,7 @@ async function bootstrap() {
   if (process.env.TRUST_PROXY === 'true') express.set('trust proxy', 1);
 
   app.use((req: any, res: any, next: any) => {
+    const isSwaggerDocument = req.path === '/api' || req.path === '/api/';
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -32,7 +33,9 @@ async function bootstrap() {
     );
     res.setHeader(
       'Content-Security-Policy',
-      "default-src 'none'; frame-ancestors 'none'",
+      isSwaggerDocument
+        ? "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+        : "default-src 'none'; frame-ancestors 'none'",
     );
     if (process.env.NODE_ENV === 'production') {
       res.setHeader(
