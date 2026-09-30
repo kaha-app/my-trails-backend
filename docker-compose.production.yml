@@ -10,7 +10,7 @@ services:
       PORT: 4000
       UPLOAD_DIR: /app/uploads
     ports:
-      - '127.0.0.1:${API_PORT:-8023}:4000'
+      - '${API_BIND_ADDRESS:-127.0.0.1}:${API_PORT:-8023}:4000'
     volumes:
       - uploads:/app/uploads
     depends_on:
