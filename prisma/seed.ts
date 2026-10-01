@@ -137,9 +137,10 @@ async function main() {
     console.log('🌱 Starting database seed...');
 
     // Read trails JSON file
-    const trailsPath = path.join(__dirname, '..', 'trails_list.json');
+    const trailsPath = path.resolve(process.cwd(), 'trails_list.json');
     const fileContent = fs.readFileSync(trailsPath, 'utf-8');
     const data: TrailsData = JSON.parse(fileContent);
+    let failureCount = 0;
 
     console.log(`📖 Found ${data.trails.length} trails to seed`);
 
@@ -150,6 +151,14 @@ async function main() {
 
         // Create slug from ID
         const slug = createSlug(trailData.id);
+        const existingTrail = await prisma.trail.findUnique({
+          where: { slug },
+          select: { id: true },
+        });
+        if (existingTrail) {
+          console.log(`   ↷ Already seeded (ID: ${existingTrail.id}); skipping`);
+          continue;
+        }
 
         // Parse duration
         const durationDays = parseDurationToDays(trailData.overview?.duration || '');
@@ -372,14 +381,19 @@ async function main() {
 
         console.log(`✅ ${trailData.hike_name} completed`);
       } catch (error) {
+        failureCount += 1;
         console.error(`❌ Error processing ${trailData.hike_name}:`, error);
       }
+    }
+
+    if (failureCount > 0) {
+      throw new Error(`Failed to seed ${failureCount} trail(s)`);
     }
 
     console.log('\n🎉 Database seeding completed successfully!');
   } catch (error) {
     console.error('❌ Seeding failed:', error);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     await prisma.$disconnect();
   }
